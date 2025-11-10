@@ -26,23 +26,7 @@ RUN cd /tmp && \
     wget https://ffmpeg.org/releases/ffmpeg-4.4.tar.xz && \
     tar -xf ffmpeg-4.4.tar.xz && \
     cd ffmpeg-4.4 && \
-    # Patch the problematic inline assembly in mathops.h (line 125)
-    # Replace the problematic asm statement with a no-op
-    python3 << 'EOF'
-with open('libavcodec/x86/mathops.h', 'r') as f:
-    content = f.read()
-# Find and replace the problematic asm statement around line 125
-# The pattern matches __asm__ volatile with 'shr' instruction
-import re
-# Match the asm statement that contains 'shr' - could span multiple lines
-pattern = r'__asm__\s+volatile\s*\([^)]*shr[^)]*\);'
-replacement = '(void)0; /* Disabled: incompatible with newer assembler */'
-content = re.sub(pattern, replacement, content, flags=re.MULTILINE | re.DOTALL)
-with open('libavcodec/x86/mathops.h', 'w') as f:
-    f.write(content)
-EOF
-    && \
-    # Use CFLAGS to disable inline assembly processing
+    python3 -c "import re; f=open('libavcodec/x86/mathops.h','r'); c=f.read(); f.close(); c=re.sub(r'__asm__\s+volatile\s*\([^)]*shr[^)]*\);', '(void)0; /* Disabled: incompatible with newer assembler */', c, flags=re.MULTILINE|re.DOTALL); f=open('libavcodec/x86/mathops.h','w'); f.write(c); f.close()" && \
     CFLAGS="-O2 -fno-asm" ./configure --prefix=/usr/local \
         --enable-shared \
         --disable-static \
