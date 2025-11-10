@@ -421,7 +421,7 @@ class AudioProcessor:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             with redirect_stderr(stderr_buffer):
-        audio, sr = librosa.load(recording['filePath'], sr=16000)
+                audio, sr = librosa.load(recording['filePath'], sr=16000)
         
         storage_path = os.getenv('STORAGE_PATH', '/app/storage')
         segments_dir = os.path.join(storage_path, 'segments')
