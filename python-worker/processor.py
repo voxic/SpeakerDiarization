@@ -1,6 +1,7 @@
 # worker/processor.py
 import time
 import os
+import warnings
 from pathlib import Path
 from datetime import datetime, timedelta
 from pymongo import MongoClient
@@ -11,6 +12,13 @@ import numpy as np
 import re
 import soundfile as sf
 import librosa
+
+# Suppress librosa and soundfile warnings about duration estimation
+warnings.filterwarnings('ignore', message='.*Estimating duration from bitrate.*')
+warnings.filterwarnings('ignore', category=UserWarning, module='librosa')
+warnings.filterwarnings('ignore', category=UserWarning, module='soundfile')
+# Suppress warnings from pyannote audio processing
+warnings.filterwarnings('ignore', message='.*duration.*', category=UserWarning)
 
 # Import huggingface_hub for authentication
 try:
@@ -102,19 +110,33 @@ class AudioProcessor:
         self, 
         job_id: str, 
         progress: int, 
-        status: str = "running"
+        status: str = "running",
+        recording_id: ObjectId = None
     ):
-        """Update job progress in MongoDB"""
+        """Update job progress in MongoDB and sync to recording"""
+        # Update job
+        job_update = {
+            "progress": progress,
+            "status": status,
+            "updatedAt": datetime.utcnow()
+        }
         self.db.processingJobs.update_one(
             {"_id": ObjectId(job_id)},
-            {
-                "$set": {
-                    "progress": progress,
-                    "status": status,
-                    "updatedAt": datetime.utcnow()
-                }
-            }
+            {"$set": job_update}
         )
+        
+        # Also update recording progress to keep UI in sync
+        if recording_id:
+            self.db.recordings.update_one(
+                {"_id": recording_id},
+                {
+                    "$set": {
+                        "progress": progress,
+                        "status": status,
+                        "updatedAt": datetime.utcnow()
+                    }
+                }
+            )
     
     def update_job_step(
         self,
@@ -170,8 +192,11 @@ class AudioProcessor:
                 )
                 recording['startTime'] = recording_start
             
+            # Store recording_id for progress updates
+            recording_id = recording['_id']
+            
             # Update status
-            self.update_job_progress(job_id, 0, "running")
+            self.update_job_progress(job_id, 0, "running", recording_id)
             self.db.processingJobs.update_one(
                 {"_id": ObjectId(job_id)},
                 {"$set": {"startedAt": datetime.utcnow()}}
@@ -180,9 +205,14 @@ class AudioProcessor:
             # Step 1: Diarization (0-30%)
             print("Starting diarization...")
             self.update_job_step(job_id, "diarization", "running", 0)
-            diarization = self.diarization_pipeline(recording['filePath'])
+            self.update_job_progress(job_id, 5, "running", recording_id)  # Show initial progress
+            print(f"Loading audio file: {recording['filePath']}")
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                diarization = self.diarization_pipeline(recording['filePath'])
+            print(f"Diarization completed, found {len(list(diarization.itertracks()))} segments")
             self.update_job_step(job_id, "diarization", "completed", 100)
-            self.update_job_progress(job_id, 30)
+            self.update_job_progress(job_id, 30, "running", recording_id)
             
             # Step 2: Identification (30-50%)
             print("Identifying speakers...")
@@ -193,12 +223,12 @@ class AudioProcessor:
                 recording_start
             )
             self.update_job_step(job_id, "identification", "completed", 100)
-            self.update_job_progress(job_id, 50)
+            self.update_job_progress(job_id, 50, "running", recording_id)
             
             # Step 3: Extract segments (50-60%)
             print("Extracting audio segments...")
             self.extract_audio_segments(recording, segments)
-            self.update_job_progress(job_id, 60)
+            self.update_job_progress(job_id, 60, "running", recording_id)
             
             # Step 4: Transcription (60-100%)
             print("Transcribing segments...")
@@ -208,12 +238,13 @@ class AudioProcessor:
                 segments, 
                 job_id, 
                 start_progress=60, 
-                end_progress=100
+                end_progress=100,
+                recording_id=recording_id
             )
             self.update_job_step(job_id, "transcription", "completed", 100)
             
             # Update final status
-            self.update_job_progress(job_id, 100, "completed")
+            self.update_job_progress(job_id, 100, "completed", recording_id)
             self.db.processingJobs.update_one(
                 {"_id": ObjectId(job_id)},
                 {"$set": {"completedAt": datetime.utcnow()}}
@@ -229,7 +260,17 @@ class AudioProcessor:
             print(f"Error processing job {job_id}: {str(e)}")
             import traceback
             traceback.print_exc()
-            self.update_job_progress(job_id, 0, "failed")
+            
+            # Try to get recording_id if available
+            recording_id = None
+            try:
+                job = self.db.processingJobs.find_one({"_id": ObjectId(job_id)})
+                if job and 'recordingId' in job:
+                    recording_id = job['recordingId']
+            except:
+                pass
+            
+            self.update_job_progress(job_id, 0, "failed", recording_id)
             self.db.processingJobs.update_one(
                 {"_id": ObjectId(job_id)},
                 {"$set": {
@@ -237,10 +278,11 @@ class AudioProcessor:
                     "completedAt": datetime.utcnow()
                 }}
             )
-            self.db.recordings.update_one(
-                {"_id": ObjectId(recording['_id'])},
-                {"$set": {"status": "failed", "errorMessage": str(e)}}
-            )
+            if recording_id:
+                self.db.recordings.update_one(
+                    {"_id": recording_id},
+                    {"$set": {"status": "failed", "errorMessage": str(e), "progress": 0}}
+                )
             raise
     
     def transcribe_segments(
@@ -249,7 +291,8 @@ class AudioProcessor:
         segments, 
         job_id, 
         start_progress=60, 
-        end_progress=100
+        end_progress=100,
+        recording_id=None
     ):
         """Transcribe all segments with progress updates"""
         total_segments = len(segments)
@@ -296,7 +339,7 @@ class AudioProcessor:
                 current_progress = start_progress + int(
                     (idx + 1) / total_segments * progress_range
                 )
-                self.update_job_progress(job_id, current_progress)
+                self.update_job_progress(job_id, current_progress, "running", recording_id)
             except Exception as e:
                 print(f"Error transcribing segment {segment['_id']}: {str(e)}")
                 continue
@@ -332,8 +375,12 @@ class AudioProcessor:
     
     def extract_audio_segments(self, recording, segments):
         """Extract audio files for each segment"""
-        # Load full audio
-        audio, sr = librosa.load(recording['filePath'], sr=16000)
+        # Load full audio with warnings suppressed
+        print(f"Loading audio for segment extraction: {recording['filePath']}")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            audio, sr = librosa.load(recording['filePath'], sr=16000)
+        print(f"Audio loaded: {len(audio)} samples at {sr}Hz")
         
         storage_path = os.getenv('STORAGE_PATH', '/app/storage')
         segments_dir = os.path.join(storage_path, 'segments')
