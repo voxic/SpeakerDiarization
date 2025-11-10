@@ -22,6 +22,14 @@ warnings.filterwarnings('ignore', category=UserWarning, module='librosa')
 warnings.filterwarnings('ignore', category=UserWarning, module='soundfile')
 # Suppress warnings from pyannote audio processing
 warnings.filterwarnings('ignore', message='.*duration.*', category=UserWarning)
+# Suppress pyannote deprecation warnings
+warnings.filterwarnings('ignore', message='.*torchaudio.*deprecated.*', category=UserWarning)
+warnings.filterwarnings('ignore', message='.*torchaudio._backend.*', category=UserWarning)
+warnings.filterwarnings('ignore', message='.*torchaudio.backend.common.*', category=UserWarning)
+warnings.filterwarnings('ignore', message='.*speechbrain.pretrained.*deprecated.*', category=UserWarning)
+warnings.filterwarnings('ignore', message='.*Module.*speechbrain.*was deprecated.*', category=UserWarning)
+# Suppress all UserWarnings from pyannote modules
+warnings.filterwarnings('ignore', category=UserWarning, module='pyannote')
 
 # Set environment variable to suppress soundfile warnings
 os.environ['SOUNDFILE_VERBOSE'] = '0'
@@ -135,14 +143,14 @@ class AudioProcessor:
         if recording_id:
             self.db.recordings.update_one(
                 {"_id": recording_id},
-                {
-                    "$set": {
-                        "progress": progress,
-                        "status": status,
-                        "updatedAt": datetime.utcnow()
-                    }
+            {
+                "$set": {
+                    "progress": progress,
+                    "status": status,
+                    "updatedAt": datetime.utcnow()
                 }
-            )
+            }
+        )
     
     def update_job_step(
         self,
@@ -221,7 +229,7 @@ class AudioProcessor:
                 warnings.simplefilter("ignore")
                 with redirect_stderr(stderr_buffer):
                     print("Running diarization pipeline (this may take a while)...")
-                    diarization = self.diarization_pipeline(recording['filePath'])
+            diarization = self.diarization_pipeline(recording['filePath'])
             
             # Count segments
             segment_list = list(diarization.itertracks())
@@ -306,10 +314,10 @@ class AudioProcessor:
                 }}
             )
             if recording_id:
-                self.db.recordings.update_one(
+            self.db.recordings.update_one(
                     {"_id": recording_id},
                     {"$set": {"status": "failed", "errorMessage": str(e), "progress": 0}}
-                )
+            )
             raise
     
     def transcribe_segments(
@@ -409,7 +417,7 @@ class AudioProcessor:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             with redirect_stderr(stderr_buffer):
-                audio, sr = librosa.load(recording['filePath'], sr=16000)
+        audio, sr = librosa.load(recording['filePath'], sr=16000)
         
         storage_path = os.getenv('STORAGE_PATH', '/app/storage')
         segments_dir = os.path.join(storage_path, 'segments')
