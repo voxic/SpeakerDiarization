@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # Next.js Application (Frontend + API)
+  nextjs:
+    build:
+      context: ./nextjs-app
+      dockerfile: Dockerfile
+    container_name: speaker-nextjs
+    ports:
+      - "3000:3000"
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/speaker_db
+      - STORAGE_PATH=/app/storage
+      - NODE_ENV=production
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=http://localhost:3000
+    volumes:
+      - audio-storage:/app/storage
+    depends_on:
+      - mongo
+    networks:
+      - speaker-net
+    restart: unless-stopped
+
+  # Python Worker for Audio Processing
+  worker:
+    build:
+      context: ./python-worker
+      dockerfile: Dockerfile
+    container_name: speaker-worker
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/speaker_db
+      - STORAGE_PATH=/app/storage
+      - HF_TOKEN=${HUGGINGFACE_TOKEN}
+      - OMP_NUM_THREADS=4
+      - MKL_NUM_THREADS=4
+    volumes:
+      - audio-storage:/app/storage
+      - models-cache:/root/.cache
+    depends_on:
+      - mongo
+    networks:
+      - speaker-net
+    restart: unless-stopped
+    # CPU limits (optional)
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+
+  # MongoDB Database
+  mongo:
+    image: mongo:7
+    container_name: speaker-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=speaker_db
+    volumes:
+      - mongo-data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    networks:
+      - speaker-net
+    restart: unless-stopped
+
+  # Mongo Express (Optional - for database management)
+  mongo-express:
+    image: mongo-express:latest
+    container_name: speaker-mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_URL=mongodb://mongo:27017/
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=password
+    depends_on:
+      - mongo
+    networks:
+      - speaker-net
+    restart: unless-stopped
+    profiles:
+      - debug
+
+networks:
+  speaker-net:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  audio-storage:
+  models-cache:
+

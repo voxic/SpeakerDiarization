@@ -1,0 +1,131 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+
+export default function UploadPage() {
+  const router = useRouter()
+  const [files, setFiles] = useState<File[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setFiles(Array.from(e.target.files))
+      setError(null)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    if (e.dataTransfer.files) {
+      setFiles(Array.from(e.dataTransfer.files))
+      setError(null)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (files.length === 0) {
+      setError('Please select at least one file')
+      return
+    }
+
+    setUploading(true)
+    setError(null)
+
+    try {
+      const formData = new FormData()
+      files.forEach(file => {
+        formData.append('files', file)
+      })
+
+      const res = await fetch('/api/recordings/upload', {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Upload failed')
+      }
+
+      const data = await res.json()
+      router.push('/dashboard')
+    } catch (err: any) {
+      setError(err.message || 'Upload failed')
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="container mx-auto p-8 max-w-2xl">
+      <h1 className="text-3xl font-bold mb-8">Upload Recording</h1>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-blue-500 transition"
+        >
+          <input
+            type="file"
+            id="file-input"
+            multiple
+            accept="audio/*"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <label htmlFor="file-input" className="cursor-pointer">
+            <div className="text-4xl mb-4">📁</div>
+            <p className="text-lg mb-2">
+              Drag and drop audio files here, or click to select
+            </p>
+            <p className="text-sm text-gray-500">
+              Filename format: YYYY-MM-DD_HH-MM-SS.ext (e.g., 2025-11-10_14-33-23.mp3)
+            </p>
+          </label>
+        </div>
+
+        {files.length > 0 && (
+          <div className="bg-gray-50 rounded-lg p-4">
+            <h3 className="font-semibold mb-2">Selected files:</h3>
+            <ul className="list-disc list-inside space-y-1">
+              {files.map((file, idx) => (
+                <li key={idx} className="text-sm">{file.name}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-4">
+          <button
+            type="submit"
+            disabled={uploading || files.length === 0}
+            className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            {uploading ? 'Uploading...' : 'Upload'}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="bg-gray-200 text-gray-700 px-6 py-2 rounded hover:bg-gray-300"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
