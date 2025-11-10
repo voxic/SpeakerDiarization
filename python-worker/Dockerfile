@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install FFmpeg 4.4 from source (compatible with PyAV 11.x)
 # This installs both runtime and development files to /usr/local
+# Disable x86asm to avoid assembler compatibility issues with newer toolchains
 RUN cd /tmp && \
     wget https://ffmpeg.org/releases/ffmpeg-4.4.tar.xz && \
     tar -xf ffmpeg-4.4.tar.xz && \
@@ -30,7 +31,8 @@ RUN cd /tmp && \
         --disable-static \
         --disable-debug \
         --disable-doc \
-        --enable-pic && \
+        --enable-pic \
+        --disable-x86asm && \
     make -j$(nproc) && \
     make install && \
     ldconfig && \
