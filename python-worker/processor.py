@@ -318,10 +318,10 @@ class AudioProcessor:
                 }}
             )
             if recording_id:
-            self.db.recordings.update_one(
+                self.db.recordings.update_one(
                     {"_id": recording_id},
                     {"$set": {"status": "failed", "errorMessage": str(e), "progress": 0}}
-            )
+                )
             raise
     
     def transcribe_segments(
