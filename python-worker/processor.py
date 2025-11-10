@@ -7,11 +7,22 @@ from pymongo import MongoClient
 from bson import ObjectId
 import torch
 from faster_whisper import WhisperModel
-from pyannote.audio import Pipeline
 import numpy as np
 import re
 import soundfile as sf
 import librosa
+
+# Import huggingface_hub for authentication
+try:
+    from huggingface_hub import login
+    import huggingface_hub
+    HUGGINGFACE_HUB_AVAILABLE = True
+except ImportError:
+    HUGGINGFACE_HUB_AVAILABLE = False
+    print("WARNING: huggingface_hub not available, authentication may fail")
+
+# Import pyannote after setting up authentication
+from pyannote.audio import Pipeline
 
 class AudioProcessor:
     # Filename pattern for timestamp extraction
@@ -21,39 +32,47 @@ class AudioProcessor:
         self.client = MongoClient(mongodb_uri)
         self.db = self.client['speaker_db']
         
+        if not hf_token:
+            raise ValueError("HuggingFace token is required")
+        
         # Set HuggingFace token as environment variable for huggingface_hub
+        # This must be done BEFORE any huggingface_hub operations
         os.environ["HF_TOKEN"] = hf_token
         os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
+        
+        # Authenticate with HuggingFace Hub before loading models
+        print(f"Authenticating with HuggingFace (token: {hf_token[:10]}...)...")
+        if HUGGINGFACE_HUB_AVAILABLE:
+            try:
+                # Login to HuggingFace Hub - this sets the token globally
+                login(token=hf_token, add_to_git_credential=False)
+                print("HuggingFace authentication successful")
+            except Exception as e:
+                print(f"Warning: HuggingFace login failed: {e}")
+                print("Continuing with environment variable authentication...")
+        else:
+            print("huggingface_hub not available, using environment variables only")
         
         # Force CPU
         torch.set_num_threads(4)
         
         # Initialize models
         print("Loading diarization pipeline...")
-        if hf_token:
-            print(f"Using HuggingFace token: {hf_token[:10]}...")
-        else:
-            print("WARNING: No HuggingFace token provided!")
-        
         try:
-            # Try with use_auth_token (for pyannote.audio 3.1.1)
+            # Load pipeline with authentication token
             self.diarization_pipeline = Pipeline.from_pretrained(
                 "pyannote/speaker-diarization-3.1",
                 use_auth_token=hf_token
             )
-        except (TypeError, AttributeError) as e:
-            # Fallback: try with token parameter (newer huggingface_hub)
-            print(f"Trying alternative token parameter...")
-            try:
-                self.diarization_pipeline = Pipeline.from_pretrained(
-                    "pyannote/speaker-diarization-3.1",
-                    token=hf_token
-                )
-            except Exception as e2:
-                print(f"Failed to load pipeline with both methods.")
-                print(f"Error with use_auth_token: {e}")
-                print(f"Error with token: {e2}")
-                raise
+        except Exception as e:
+            print(f"Failed to load diarization pipeline: {e}")
+            print("\nTroubleshooting steps:")
+            print("1. Verify your HuggingFace token is valid")
+            print("2. Accept model terms at:")
+            print("   - https://huggingface.co/pyannote/segmentation-3.0")
+            print("   - https://huggingface.co/pyannote/speaker-diarization-3.1")
+            print("   - https://huggingface.co/pyannote/embedding")
+            raise
         
         self.diarization_pipeline.to(torch.device("cpu"))
         print("Diarization pipeline loaded")

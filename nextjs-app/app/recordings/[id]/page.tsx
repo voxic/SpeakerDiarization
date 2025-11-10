@@ -63,29 +63,29 @@ export default function RecordingDetailPage() {
   }, [] as string[]) || []
 
   if (loading) {
-    return <div className="container mx-auto p-8">Loading...</div>
+    return <div className="container mx-auto p-8 text-white">Loading...</div>
   }
 
   if (!recording) {
-    return <div className="container mx-auto p-8">Recording not found</div>
+    return <div className="container mx-auto p-8 text-white">Recording not found</div>
   }
 
   return (
     <div className="container mx-auto p-8">
       <div className="mb-6">
-        <Link href="/recordings" className="text-blue-500 hover:underline">
+        <Link href="/recordings" className="text-link-blue hover:underline font-medium">
           ← Back to Recordings
         </Link>
       </div>
 
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h1 className="text-2xl font-bold mb-4">{recording.originalFilename}</h1>
+      <div className="bg-card-white rounded-lg shadow p-6 mb-6">
+        <h1 className="text-2xl font-bold mb-4 text-gray-900">{recording.originalFilename}</h1>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <p className="text-sm text-gray-500">Status</p>
             <p className={`font-semibold ${
               recording.status === 'completed' ? 'text-green-600' :
-              recording.status === 'processing' ? 'text-blue-600' :
+              recording.status === 'processing' ? 'text-status-blue' :
               'text-gray-600'
             }`}>
               {recording.status}
@@ -93,15 +93,15 @@ export default function RecordingDetailPage() {
           </div>
           <div>
             <p className="text-sm text-gray-500">Progress</p>
-            <p className="font-semibold">{recording.progress}%</p>
+            <p className="font-semibold text-gray-900">{recording.progress}%</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Duration</p>
-            <p className="font-semibold">{formatDuration(recording.durationSeconds)}</p>
+            <p className="font-semibold text-gray-900">{formatDuration(recording.durationSeconds)}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Start Time</p>
-            <p className="font-semibold">
+            <p className="font-semibold text-gray-900">
               {recording.startTime 
                 ? new Date(recording.startTime).toLocaleString()
                 : 'N/A'}
@@ -113,13 +113,13 @@ export default function RecordingDetailPage() {
       {recording.status === 'completed' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Speakers</h2>
+            <div className="bg-card-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4 text-gray-900">Speakers</h2>
               <div className="space-y-2">
                 <button
                   onClick={() => setSelectedSpeaker(null)}
-                  className={`w-full text-left px-3 py-2 rounded ${
-                    selectedSpeaker === null ? 'bg-blue-100' : 'hover:bg-gray-100'
+                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                    selectedSpeaker === null ? 'bg-status-blue-bg text-status-blue font-medium' : 'hover:bg-gray-100 text-gray-700'
                   }`}
                 >
                   All Speakers
@@ -130,8 +130,8 @@ export default function RecordingDetailPage() {
                     <button
                       key={speaker}
                       onClick={() => setSelectedSpeaker(speaker)}
-                      className={`w-full text-left px-3 py-2 rounded ${
-                        selectedSpeaker === speaker ? 'bg-blue-100' : 'hover:bg-gray-100'
+                      className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                        selectedSpeaker === speaker ? 'bg-status-blue-bg text-status-blue font-medium' : 'hover:bg-gray-100 text-gray-700'
                       }`}
                     >
                       {speaker} ({count} segments)
@@ -143,8 +143,8 @@ export default function RecordingDetailPage() {
           </div>
 
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold mb-4">Transcription</h2>
+            <div className="bg-card-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4 text-gray-900">Transcription</h2>
               <div className="space-y-4 max-h-[600px] overflow-y-auto">
                 {filteredSegments.length === 0 ? (
                   <p className="text-gray-500">No segments found</p>
@@ -152,7 +152,7 @@ export default function RecordingDetailPage() {
                   filteredSegments.map((segment) => (
                     <div key={segment._id} className="border-b pb-4">
                       <div className="flex justify-between items-start mb-2">
-                        <span className="font-semibold text-blue-600">
+                        <span className="font-semibold text-link-blue">
                           {segment.speakerLabel}
                         </span>
                         <span className="text-sm text-gray-500">
@@ -171,13 +171,13 @@ export default function RecordingDetailPage() {
       )}
 
       {recording.status === 'processing' && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-card-white rounded-lg shadow p-6">
           <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-            <p className="text-lg">Processing recording...</p>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-blue mb-4"></div>
+            <p className="text-lg text-gray-900">Processing recording...</p>
             <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
               <div 
-                className="bg-blue-600 h-2 rounded-full transition-all" 
+                className="bg-primary-blue h-2 rounded-full transition-all" 
                 style={{ width: `${recording.progress}%` }}
               />
             </div>

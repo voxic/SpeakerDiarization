@@ -5,9 +5,16 @@
 :root {
   --foreground-rgb: 255, 255, 255;
   --background-rgb: 26, 44, 56; /* Dark teal/blue-green #1A2C38 */
-  --accent-green: 0, 237, 100; /* Vibrant green #00ED64 */
+  --primary-blue: 59, 130, 246; /* Medium blue #3B82F6 for buttons */
+  --primary-blue-hover: 37, 99, 235; /* Darker blue #2563EB for hover */
+  --status-blue: 96, 165, 250; /* Light blue #60A5FA for status badges */
+  --status-blue-bg: 219, 234, 254; /* Very light blue #DBEAFE for status backgrounds */
+  --link-blue: 59, 130, 246; /* Vibrant blue #3B82F6 for links */
   --text-secondary: 200, 200, 200;
+  --text-muted: 156, 163, 175; /* Gray-400 for muted text */
   --border-gray: 60, 70, 80;
+  --card-bg: 255, 255, 255; /* White for cards */
+  --table-header-bg: 249, 250, 251; /* Gray-50 for table headers */
 }
 
 * {

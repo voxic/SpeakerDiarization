@@ -66,51 +66,51 @@ export default function SpeakersPage() {
   return (
     <div className="container mx-auto p-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Known Speakers</h1>
+        <h1 className="text-3xl font-bold text-white">Known Speakers</h1>
         <button
           onClick={() => setShowAddForm(!showAddForm)}
-          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+          className="bg-primary-blue text-white px-4 py-2 rounded-lg hover:bg-primary-blue-hover transition-colors"
         >
           {showAddForm ? 'Cancel' : 'Add Speaker'}
         </button>
       </div>
 
       {showAddForm && (
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Add New Speaker</h2>
+        <div className="bg-card-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900">Add New Speaker</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Name *</label>
+              <label className="block text-sm font-medium mb-1 text-gray-700">Name *</label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full border rounded px-3 py-2"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Description</label>
+              <label className="block text-sm font-medium mb-1 text-gray-700">Description</label>
               <textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full border rounded px-3 py-2"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
                 rows={3}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Audio Sample *</label>
+              <label className="block text-sm font-medium mb-1 text-gray-700">Audio Sample *</label>
               <input
                 type="file"
                 accept="audio/*"
                 onChange={(e) => setFormData({ ...formData, audioFile: e.target.files?.[0] || null })}
-                className="w-full border rounded px-3 py-2"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
                 required
               />
             </div>
             <button
               type="submit"
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+              className="bg-primary-blue text-white px-4 py-2 rounded-lg hover:bg-primary-blue-hover transition-colors"
             >
               Add Speaker
             </button>
@@ -119,14 +119,14 @@ export default function SpeakersPage() {
       )}
 
       {loading ? (
-        <div className="text-center p-8">Loading...</div>
+        <div className="text-center p-8 text-white">Loading...</div>
       ) : speakers.length === 0 ? (
-        <div className="text-center p-8 text-gray-500">No speakers added yet</div>
+        <div className="text-center p-8 text-mongodb-text-muted">No speakers added yet</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {speakers.map((speaker) => (
-            <div key={speaker._id} className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-2">{speaker.name}</h3>
+            <div key={speaker._id} className="bg-card-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-2 text-gray-900">{speaker.name}</h3>
               {speaker.description && (
                 <p className="text-gray-600 text-sm mb-4">{speaker.description}</p>
               )}
