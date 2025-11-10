@@ -1,7 +1,10 @@
 # worker/processor.py
 import time
 import os
+import sys
 import warnings
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 from datetime import datetime, timedelta
 from pymongo import MongoClient
@@ -19,6 +22,9 @@ warnings.filterwarnings('ignore', category=UserWarning, module='librosa')
 warnings.filterwarnings('ignore', category=UserWarning, module='soundfile')
 # Suppress warnings from pyannote audio processing
 warnings.filterwarnings('ignore', message='.*duration.*', category=UserWarning)
+
+# Set environment variable to suppress soundfile warnings
+os.environ['SOUNDFILE_VERBOSE'] = '0'
 
 # Import huggingface_hub for authentication
 try:
@@ -203,35 +209,50 @@ class AudioProcessor:
             )
             
             # Step 1: Diarization (0-30%)
-            print("Starting diarization...")
+            print("=" * 60)
+            print("STEP 1: Starting diarization...")
+            print(f"Audio file: {recording['filePath']}")
             self.update_job_step(job_id, "diarization", "running", 0)
             self.update_job_progress(job_id, 5, "running", recording_id)  # Show initial progress
-            print(f"Loading audio file: {recording['filePath']}")
+            
+            # Suppress stderr output from soundfile/librosa
+            stderr_buffer = StringIO()
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                diarization = self.diarization_pipeline(recording['filePath'])
-            print(f"Diarization completed, found {len(list(diarization.itertracks()))} segments")
+                with redirect_stderr(stderr_buffer):
+                    print("Running diarization pipeline (this may take a while)...")
+                    diarization = self.diarization_pipeline(recording['filePath'])
+            
+            # Count segments
+            segment_list = list(diarization.itertracks())
+            num_segments = len(segment_list)
+            print(f"✓ Diarization completed! Found {num_segments} speaker segments")
             self.update_job_step(job_id, "diarization", "completed", 100)
             self.update_job_progress(job_id, 30, "running", recording_id)
             
             # Step 2: Identification (30-50%)
-            print("Identifying speakers...")
+            print("=" * 60)
+            print("STEP 2: Identifying speakers and creating segments...")
             self.update_job_step(job_id, "identification", "running", 0)
             segments = self.identify_speakers(
                 recording, 
                 diarization,
                 recording_start
             )
+            print(f"✓ Created {len(segments)} segment documents in database")
             self.update_job_step(job_id, "identification", "completed", 100)
             self.update_job_progress(job_id, 50, "running", recording_id)
             
             # Step 3: Extract segments (50-60%)
-            print("Extracting audio segments...")
+            print("=" * 60)
+            print("STEP 3: Extracting audio segments...")
             self.extract_audio_segments(recording, segments)
+            print(f"✓ Extracted {len(segments)} audio segment files")
             self.update_job_progress(job_id, 60, "running", recording_id)
             
             # Step 4: Transcription (60-100%)
-            print("Transcribing segments...")
+            print("=" * 60)
+            print(f"STEP 4: Transcribing {len(segments)} segments...")
             self.update_job_step(job_id, "transcription", "running", 0)
             self.transcribe_segments(
                 recording, 
@@ -241,6 +262,7 @@ class AudioProcessor:
                 end_progress=100,
                 recording_id=recording_id
             )
+            print("✓ Transcription completed for all segments")
             self.update_job_step(job_id, "transcription", "completed", 100)
             
             # Update final status
@@ -254,7 +276,12 @@ class AudioProcessor:
                 {"$set": {"status": "completed", "progress": 100}}
             )
             
-            print(f"Job {job_id} completed successfully")
+            print("=" * 60)
+            print(f"✓✓✓ JOB COMPLETED SUCCESSFULLY ✓✓✓")
+            print(f"Job ID: {job_id}")
+            print(f"Recording ID: {recording['_id']}")
+            print(f"Total segments processed: {len(segments)}")
+            print("=" * 60)
             
         except Exception as e:
             print(f"Error processing job {job_id}: {str(e)}")
@@ -302,6 +329,8 @@ class AudioProcessor:
         progress_range = end_progress - start_progress
         
         for idx, segment in enumerate(segments):
+            if (idx + 1) % 10 == 0 or idx == 0:
+                print(f"  Transcribing segment {idx + 1}/{total_segments}...")
             try:
                 # Transcribe segment
                 result, info = self.whisper.transcribe(
@@ -376,11 +405,11 @@ class AudioProcessor:
     def extract_audio_segments(self, recording, segments):
         """Extract audio files for each segment"""
         # Load full audio with warnings suppressed
-        print(f"Loading audio for segment extraction: {recording['filePath']}")
+        stderr_buffer = StringIO()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            audio, sr = librosa.load(recording['filePath'], sr=16000)
-        print(f"Audio loaded: {len(audio)} samples at {sr}Hz")
+            with redirect_stderr(stderr_buffer):
+                audio, sr = librosa.load(recording['filePath'], sr=16000)
         
         storage_path = os.getenv('STORAGE_PATH', '/app/storage')
         segments_dir = os.path.join(storage_path, 'segments')
