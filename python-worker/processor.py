@@ -63,23 +63,23 @@ class AudioProcessor:
         os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
         
         # Authenticate with HuggingFace Hub before loading models
-        print(f"Authenticating with HuggingFace (token: {hf_token[:10]}...)...")
+        print(f"Authenticating with HuggingFace (token: {hf_token[:10]}...)...", flush=True)
         if HUGGINGFACE_HUB_AVAILABLE:
             try:
                 # Login to HuggingFace Hub - this sets the token globally
                 login(token=hf_token, add_to_git_credential=False)
-                print("HuggingFace authentication successful")
+                print("HuggingFace authentication successful", flush=True)
             except Exception as e:
-                print(f"Warning: HuggingFace login failed: {e}")
-                print("Continuing with environment variable authentication...")
+                print(f"Warning: HuggingFace login failed: {e}", flush=True)
+                print("Continuing with environment variable authentication...", flush=True)
         else:
-            print("huggingface_hub not available, using environment variables only")
+            print("huggingface_hub not available, using environment variables only", flush=True)
         
         # Force CPU
         torch.set_num_threads(4)
         
         # Initialize models
-        print("Loading diarization pipeline...")
+        print("Loading diarization pipeline...", flush=True)
         try:
             # Load pipeline with authentication token
             self.diarization_pipeline = Pipeline.from_pretrained(
@@ -97,16 +97,16 @@ class AudioProcessor:
             raise
         
         self.diarization_pipeline.to(torch.device("cpu"))
-        print("Diarization pipeline loaded")
+        print("Diarization pipeline loaded", flush=True)
         
-        print("Loading Whisper model...")
+        print("Loading Whisper model...", flush=True)
         self.whisper = WhisperModel(
             "base",  # Change to "tiny" for faster processing
             device="cpu",
             compute_type="int8",
             cpu_threads=4
         )
-        print("Whisper model loaded")
+        print("Whisper model loaded", flush=True)
     
     def extract_start_time(self, filename: str) -> datetime:
         """Extract start time from filename format: YYYY-MM-DD_HH-MM-SS.ext"""
@@ -183,16 +183,20 @@ class AudioProcessor:
         """Main processing function"""
         try:
             # Get job details
+            print(f"\n{'='*60}", flush=True)
+            print(f"Starting processing for job: {job_id}", flush=True)
+            print(f"{'='*60}\n", flush=True)
+            
             job = self.db.processingJobs.find_one({"_id": ObjectId(job_id)})
             if not job:
-                print(f"Job {job_id} not found")
+                print(f"Job {job_id} not found", flush=True)
                 return
             
             recording = self.db.recordings.find_one(
                 {"_id": ObjectId(job['recordingId'])}
             )
             if not recording:
-                print(f"Recording not found for job {job_id}")
+                print(f"Recording not found for job {job_id}", flush=True)
                 return
             
             # Extract start time from filename
@@ -217,50 +221,50 @@ class AudioProcessor:
             )
             
             # Step 1: Diarization (0-30%)
-            print("=" * 60)
-            print("STEP 1: Starting diarization...")
-            print(f"Audio file: {recording['filePath']}")
+            print("=" * 60, flush=True)
+            print("STEP 1: Starting diarization...", flush=True)
+            print(f"Audio file: {recording['filePath']}", flush=True)
             self.update_job_step(job_id, "diarization", "running", 0)
             self.update_job_progress(job_id, 5, "running", recording_id)  # Show initial progress
             
-            # Suppress stderr output from soundfile/librosa
+            print("Running diarization pipeline (this may take a while)...", flush=True)
+            # Suppress stderr output from soundfile/librosa during pipeline execution
             stderr_buffer = StringIO()
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 with redirect_stderr(stderr_buffer):
-                    print("Running diarization pipeline (this may take a while)...")
-            diarization = self.diarization_pipeline(recording['filePath'])
+                    diarization = self.diarization_pipeline(recording['filePath'])
             
             # Count segments
             segment_list = list(diarization.itertracks())
             num_segments = len(segment_list)
-            print(f"✓ Diarization completed! Found {num_segments} speaker segments")
+            print(f"✓ Diarization completed! Found {num_segments} speaker segments", flush=True)
             self.update_job_step(job_id, "diarization", "completed", 100)
             self.update_job_progress(job_id, 30, "running", recording_id)
             
             # Step 2: Identification (30-50%)
-            print("=" * 60)
-            print("STEP 2: Identifying speakers and creating segments...")
+            print("=" * 60, flush=True)
+            print("STEP 2: Identifying speakers and creating segments...", flush=True)
             self.update_job_step(job_id, "identification", "running", 0)
             segments = self.identify_speakers(
                 recording, 
                 diarization,
                 recording_start
             )
-            print(f"✓ Created {len(segments)} segment documents in database")
+            print(f"✓ Created {len(segments)} segment documents in database", flush=True)
             self.update_job_step(job_id, "identification", "completed", 100)
             self.update_job_progress(job_id, 50, "running", recording_id)
             
             # Step 3: Extract segments (50-60%)
-            print("=" * 60)
-            print("STEP 3: Extracting audio segments...")
+            print("=" * 60, flush=True)
+            print("STEP 3: Extracting audio segments...", flush=True)
             self.extract_audio_segments(recording, segments)
-            print(f"✓ Extracted {len(segments)} audio segment files")
+            print(f"✓ Extracted {len(segments)} audio segment files", flush=True)
             self.update_job_progress(job_id, 60, "running", recording_id)
             
             # Step 4: Transcription (60-100%)
-            print("=" * 60)
-            print(f"STEP 4: Transcribing {len(segments)} segments...")
+            print("=" * 60, flush=True)
+            print(f"STEP 4: Transcribing {len(segments)} segments...", flush=True)
             self.update_job_step(job_id, "transcription", "running", 0)
             self.transcribe_segments(
                 recording, 
@@ -270,7 +274,7 @@ class AudioProcessor:
                 end_progress=100,
                 recording_id=recording_id
             )
-            print("✓ Transcription completed for all segments")
+            print("✓ Transcription completed for all segments", flush=True)
             self.update_job_step(job_id, "transcription", "completed", 100)
             
             # Update final status
@@ -284,15 +288,15 @@ class AudioProcessor:
                 {"$set": {"status": "completed", "progress": 100}}
             )
             
-            print("=" * 60)
-            print(f"✓✓✓ JOB COMPLETED SUCCESSFULLY ✓✓✓")
-            print(f"Job ID: {job_id}")
-            print(f"Recording ID: {recording['_id']}")
-            print(f"Total segments processed: {len(segments)}")
-            print("=" * 60)
+            print("=" * 60, flush=True)
+            print(f"✓✓✓ JOB COMPLETED SUCCESSFULLY ✓✓✓", flush=True)
+            print(f"Job ID: {job_id}", flush=True)
+            print(f"Recording ID: {recording['_id']}", flush=True)
+            print(f"Total segments processed: {len(segments)}", flush=True)
+            print("=" * 60, flush=True)
             
         except Exception as e:
-            print(f"Error processing job {job_id}: {str(e)}")
+            print(f"Error processing job {job_id}: {str(e)}", flush=True)
             import traceback
             traceback.print_exc()
             
@@ -338,7 +342,7 @@ class AudioProcessor:
         
         for idx, segment in enumerate(segments):
             if (idx + 1) % 10 == 0 or idx == 0:
-                print(f"  Transcribing segment {idx + 1}/{total_segments}...")
+                print(f"  Transcribing segment {idx + 1}/{total_segments}...", flush=True)
             try:
                 # Transcribe segment
                 result, info = self.whisper.transcribe(
