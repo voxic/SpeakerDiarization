@@ -32,7 +32,9 @@ services:
     environment:
       - MONGODB_URI=mongodb://mongo:27017/speaker_db
       - STORAGE_PATH=/app/storage
+      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
       - HF_TOKEN=${HUGGINGFACE_TOKEN}
+      - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_TOKEN}
       - OMP_NUM_THREADS=4
       - MKL_NUM_THREADS=4
     volumes:

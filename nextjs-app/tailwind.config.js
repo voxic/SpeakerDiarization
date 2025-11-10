@@ -6,7 +6,18 @@ module.exports = {
     './app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        'mongodb-bg': '#1A2C38',
+        'mongodb-green': '#00ED64',
+        'mongodb-text': '#FFFFFF',
+        'mongodb-text-secondary': '#C8C8C8',
+        'mongodb-border': '#3C4650',
+      },
+      backgroundColor: {
+        'mongodb-dark': '#1A2C38',
+      },
+    },
   },
   plugins: [],
 }

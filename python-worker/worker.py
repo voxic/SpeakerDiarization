@@ -13,10 +13,15 @@ load_dotenv()
 def worker_loop():
     """Main worker loop - polls MongoDB for jobs"""
     mongodb_uri = os.getenv("MONGODB_URI", "mongodb://mongo:27017/speaker_db")
-    hf_token = os.getenv("HF_TOKEN")
+    # Support both HUGGINGFACE_TOKEN and HF_TOKEN for compatibility
+    hf_token = os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_TOKEN")
     
     if not hf_token:
-        raise ValueError("HF_TOKEN environment variable is required")
+        raise ValueError("HUGGINGFACE_TOKEN or HF_TOKEN environment variable is required")
+    
+    # Set HF_TOKEN env var for huggingface_hub library
+    os.environ["HF_TOKEN"] = hf_token
+    os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
     
     print("Initializing audio processor...")
     processor = AudioProcessor(mongodb_uri, hf_token)

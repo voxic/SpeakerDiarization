@@ -21,15 +21,40 @@ class AudioProcessor:
         self.client = MongoClient(mongodb_uri)
         self.db = self.client['speaker_db']
         
+        # Set HuggingFace token as environment variable for huggingface_hub
+        os.environ["HF_TOKEN"] = hf_token
+        os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
+        
         # Force CPU
         torch.set_num_threads(4)
         
         # Initialize models
         print("Loading diarization pipeline...")
-        self.diarization_pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1",
-            use_auth_token=hf_token
-        )
+        if hf_token:
+            print(f"Using HuggingFace token: {hf_token[:10]}...")
+        else:
+            print("WARNING: No HuggingFace token provided!")
+        
+        try:
+            # Try with use_auth_token (for pyannote.audio 3.1.1)
+            self.diarization_pipeline = Pipeline.from_pretrained(
+                "pyannote/speaker-diarization-3.1",
+                use_auth_token=hf_token
+            )
+        except (TypeError, AttributeError) as e:
+            # Fallback: try with token parameter (newer huggingface_hub)
+            print(f"Trying alternative token parameter...")
+            try:
+                self.diarization_pipeline = Pipeline.from_pretrained(
+                    "pyannote/speaker-diarization-3.1",
+                    token=hf_token
+                )
+            except Exception as e2:
+                print(f"Failed to load pipeline with both methods.")
+                print(f"Error with use_auth_token: {e}")
+                print(f"Error with token: {e2}")
+                raise
+        
         self.diarization_pipeline.to(torch.device("cpu"))
         print("Diarization pipeline loaded")
         
