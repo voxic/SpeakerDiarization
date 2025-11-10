@@ -2,7 +2,27 @@
 
 ## Ubuntu 24.04 VM Preparation
 
-If you're setting up on a fresh Ubuntu 24.04 VM, follow these steps to prepare the system:
+If you're setting up on a fresh Ubuntu 24.04 VM, you can use the automated deployment script:
+
+### Automated Setup (Recommended)
+
+```bash
+# Download and run the deployment script
+./deploy-ubuntu.sh
+```
+
+The script will automatically:
+- Update system packages
+- Install Docker Engine and Docker Compose
+- Configure firewall rules
+- Install Git
+- Verify all installations
+
+**Note:** After running the script, if you were added to the docker group, you'll need to log out and log back in (or run `newgrp docker`) for the changes to take effect.
+
+### Manual Setup
+
+If you prefer to set up manually, follow these steps:
 
 ### 1. Update System Packages
 
