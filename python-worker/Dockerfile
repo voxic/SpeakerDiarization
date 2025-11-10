@@ -21,18 +21,35 @@ RUN apt-get update && apt-get install -y \
 
 # Install FFmpeg 4.4 from source (compatible with PyAV 11.x)
 # This installs both runtime and development files to /usr/local
-# Disable x86asm to avoid assembler compatibility issues with newer toolchains
+# Patch inline assembly to fix compatibility with newer assemblers
 RUN cd /tmp && \
     wget https://ffmpeg.org/releases/ffmpeg-4.4.tar.xz && \
     tar -xf ffmpeg-4.4.tar.xz && \
     cd ffmpeg-4.4 && \
-    ./configure --prefix=/usr/local \
+    # Patch the problematic inline assembly in mathops.h (line 125)
+    # Replace the problematic asm statement with a no-op
+    python3 << 'EOF'
+with open('libavcodec/x86/mathops.h', 'r') as f:
+    content = f.read()
+# Find and replace the problematic asm statement around line 125
+# The pattern matches __asm__ volatile with 'shr' instruction
+import re
+# Match the asm statement that contains 'shr' - could span multiple lines
+pattern = r'__asm__\s+volatile\s*\([^)]*shr[^)]*\);'
+replacement = '(void)0; /* Disabled: incompatible with newer assembler */'
+content = re.sub(pattern, replacement, content, flags=re.MULTILINE | re.DOTALL)
+with open('libavcodec/x86/mathops.h', 'w') as f:
+    f.write(content)
+EOF
+    && \
+    # Use CFLAGS to disable inline assembly processing
+    CFLAGS="-O2 -fno-asm" ./configure --prefix=/usr/local \
         --enable-shared \
         --disable-static \
         --disable-debug \
         --disable-doc \
         --enable-pic \
-        --disable-x86asm && \
+        --disable-asm && \
     make -j$(nproc) && \
     make install && \
     ldconfig && \
