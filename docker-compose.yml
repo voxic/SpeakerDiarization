@@ -36,8 +36,8 @@ services:
       - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
       - HF_TOKEN=${HUGGINGFACE_TOKEN}
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_TOKEN}
-      - OMP_NUM_THREADS=4
-      - MKL_NUM_THREADS=4
+      - OMP_NUM_THREADS=5
+      - MKL_NUM_THREADS=5
     volumes:
       - audio-storage:/app/storage
       - models-cache:/root/.cache
@@ -51,8 +51,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'
-          memory: 8G
+          cpus: '5'
+          memory: 16G
 
   # MongoDB Database
   mongo:
