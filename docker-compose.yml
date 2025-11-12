@@ -6,26 +6,21 @@ services:
     build:
       context: ./nextjs-app
       dockerfile: Dockerfile
+    container_name: speaker-nextjs
     ports:
-      - "3001"
+      - "3001:3001"
     environment:
       - MONGODB_URI=mongodb://mongo:27017/speaker_db
       - STORAGE_PATH=/app/storage
       - NODE_ENV=production
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3001}
+      - NEXTAUTH_URL=http://localhost:3001
     volumes:
       - audio-storage:/app/storage
     depends_on:
       - mongo
     networks:
-      - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.speaker-nextjs.rule=Host(`your-domain.com`)"
-      - "traefik.http.routers.speaker-nextjs.entrypoints=websecure"
-      - "traefik.http.routers.speaker-nextjs.tls.certResolver=letsencrypt"
-      - "traefik.http.services.speaker-nextjs.loadbalancer.server.port=3001"
+      - speaker-net
     restart: unless-stopped
 
   # Python Worker for Audio Processing
@@ -33,6 +28,7 @@ services:
     build:
       context: ./python-worker
       dockerfile: Dockerfile
+    container_name: speaker-worker
     environment:
       - MONGODB_URI=mongodb://mongo:27017/speaker_db
       - STORAGE_PATH=/app/storage
@@ -47,7 +43,7 @@ services:
     depends_on:
       - mongo
     networks:
-      - dokploy-network
+      - speaker-net
     restart: unless-stopped
     # CPU limits (optional)
     deploy:
@@ -59,6 +55,7 @@ services:
   # MongoDB Database
   mongo:
     image: mongo:7
+    container_name: speaker-mongo
     ports:
       - "27017:27017"
     environment:
@@ -67,14 +64,15 @@ services:
       - mongo-data:/data/db
       - ./mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
     networks:
-      - dokploy-network
+      - speaker-net
     restart: unless-stopped
 
   # Mongo Express (Optional - for database management)
   mongo-express:
     image: mongo-express:latest
+    container_name: speaker-mongo-express
     ports:
-      - "8081"
+      - "8081:8081"
     environment:
       - ME_CONFIG_MONGODB_URL=mongodb://mongo:27017/
       - ME_CONFIG_BASICAUTH_USERNAME=admin
@@ -82,20 +80,14 @@ services:
     depends_on:
       - mongo
     networks:
-      - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.speaker-mongo-express.rule=Host(`mongo-express.your-domain.com`)"
-      - "traefik.http.routers.speaker-mongo-express.entrypoints=websecure"
-      - "traefik.http.routers.speaker-mongo-express.tls.certResolver=letsencrypt"
-      - "traefik.http.services.speaker-mongo-express.loadbalancer.server.port=8081"
+      - speaker-net
     restart: unless-stopped
     profiles:
       - debug
 
 networks:
-  dokploy-network:
-    external: true
+  speaker-net:
+    driver: bridge
 
 volumes:
   mongo-data:
