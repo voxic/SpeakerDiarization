@@ -22,7 +22,7 @@ services:
       - dokploy-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.speaker-nextjs.rule=Host(`your-domain.com`)"
+      - "traefik.http.routers.speaker-nextjs.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.speaker-nextjs.entrypoints=websecure"
       - "traefik.http.routers.speaker-nextjs.tls.certResolver=letsencrypt"
       - "traefik.http.services.speaker-nextjs.loadbalancer.server.port=3001"
@@ -85,7 +85,7 @@ services:
       - dokploy-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.speaker-mongo-express.rule=Host(`mongo-express.your-domain.com`)"
+      - "traefik.http.routers.speaker-mongo-express.rule=Host(`mongo-express.${DOMAIN}`)"
       - "traefik.http.routers.speaker-mongo-express.entrypoints=websecure"
       - "traefik.http.routers.speaker-mongo-express.tls.certResolver=letsencrypt"
       - "traefik.http.services.speaker-mongo-express.loadbalancer.server.port=8081"
