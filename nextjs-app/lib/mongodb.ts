@@ -43,3 +43,19 @@ export async function connectToDatabase(): Promise<{
   return { client, db };
 }
 
+/**
+ * Check MongoDB connection health
+ * @returns Promise<boolean> - true if connected, false otherwise
+ */
+export async function checkMongoConnection(): Promise<boolean> {
+  try {
+    const { client, db } = await connectToDatabase();
+    // Ping the database to verify connection
+    await db.admin().ping();
+    return true;
+  } catch (error) {
+    console.error('MongoDB connection check failed:', error);
+    return false;
+  }
+}
+

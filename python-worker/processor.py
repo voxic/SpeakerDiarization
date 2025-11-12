@@ -51,8 +51,16 @@ class AudioProcessor:
     FILENAME_PATTERN = r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})"
     
     def __init__(self, mongodb_uri: str, hf_token: str):
-        self.client = MongoClient(mongodb_uri)
+        print(f"Connecting to MongoDB at {mongodb_uri}...", flush=True)
+        self.client = MongoClient(mongodb_uri, serverSelectionTimeoutMS=5000)
         self.db = self.client['speaker_db']
+        
+        # Verify MongoDB connection
+        try:
+            self.client.admin.command('ping')
+            print("✓ MongoDB connection verified in AudioProcessor", flush=True)
+        except Exception as e:
+            raise ConnectionError(f"Failed to connect to MongoDB in AudioProcessor: {e}")
         
         if not hf_token:
             raise ValueError("HuggingFace token is required")
