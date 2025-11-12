@@ -18,7 +18,8 @@ services:
     volumes:
       - audio-storage:/app/storage
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     networks:
       - speaker-net
     restart: unless-stopped
@@ -41,7 +42,8 @@ services:
       - audio-storage:/app/storage
       - models-cache:/root/.cache
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     networks:
       - speaker-net
     restart: unless-stopped
@@ -66,6 +68,12 @@ services:
     networks:
       - speaker-net
     restart: unless-stopped
+    healthcheck:
+      test: mongosh --eval "db.adminCommand('ping')" --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
   # Mongo Express (Optional - for database management)
   mongo-express:
@@ -78,7 +86,8 @@ services:
       - ME_CONFIG_BASICAUTH_USERNAME=admin
       - ME_CONFIG_BASICAUTH_PASSWORD=password
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     networks:
       - speaker-net
     restart: unless-stopped
