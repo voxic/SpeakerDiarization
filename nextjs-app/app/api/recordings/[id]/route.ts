@@ -33,10 +33,16 @@ export async function GET(
       .sort({ createdAt: -1 })
       .toArray();
 
+    // Get speaker tags
+    const speakerTags = await db.collection('speakerTags')
+      .find({ recordingId: new ObjectId(params.id) })
+      .toArray();
+
     return NextResponse.json({
       ...recording,
       segments,
-      jobs
+      jobs,
+      speakerTags
     });
   } catch (error: any) {
     return NextResponse.json(
