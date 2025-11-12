@@ -10,7 +10,7 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - MONGODB_URI=mongodb://mongo:27017/speaker_db
+      - MONGODB_URI=${MONGODB_URI}
       - STORAGE_PATH=/app/storage
       - NODE_ENV=production
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
@@ -30,7 +30,7 @@ services:
       dockerfile: Dockerfile
     container_name: speaker-worker
     environment:
-      - MONGODB_URI=mongodb://mongo:27017/speaker_db
+      - MONGODB_URI=${MONGODB_URI}
       - STORAGE_PATH=/app/storage
       - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
       - HF_TOKEN=${HUGGINGFACE_TOKEN}
@@ -74,7 +74,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - ME_CONFIG_MONGODB_URL=mongodb://mongo:27017/
+      - ME_CONFIG_MONGODB_URL=${MONGODB_URI}
       - ME_CONFIG_BASICAUTH_USERNAME=admin
       - ME_CONFIG_BASICAUTH_PASSWORD=password
     depends_on:
