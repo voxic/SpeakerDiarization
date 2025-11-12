@@ -23,8 +23,6 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.speaker-nextjs.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.speaker-nextjs.entrypoints=websecure"
-      - "traefik.http.routers.speaker-nextjs.tls.certResolver=letsencrypt"
       - "traefik.http.services.speaker-nextjs.loadbalancer.server.port=3001"
     restart: unless-stopped
 
