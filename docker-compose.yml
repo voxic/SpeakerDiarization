@@ -17,9 +17,7 @@ services:
       - NEXTAUTH_URL=http://localhost:3001
     volumes:
       - audio-storage:/app/storage
-    depends_on:
-      mongo:
-        condition: service_healthy
+
     networks:
       - speaker-net
     restart: unless-stopped
@@ -41,9 +39,7 @@ services:
     volumes:
       - audio-storage:/app/storage
       - models-cache:/root/.cache
-    depends_on:
-      mongo:
-        condition: service_healthy
+
     networks:
       - speaker-net
     restart: unless-stopped
@@ -54,49 +50,6 @@ services:
           cpus: '5'
           memory: 16G
 
-  # MongoDB Database
-  mongo:
-    image: mongo:7
-    container_name: speaker-mongo
-    hostname: mongo
-    ports:
-      - "27017:27017"
-    environment:
-      - MONGO_INITDB_DATABASE=speaker_db
-    volumes:
-      - mongo-data:/data/db
-      - ./mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
-    networks:
-      speaker-net:
-        aliases:
-          - mongo
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
-
-  # Mongo Express (Optional - for database management)
-  mongo-express:
-    image: mongo-express:latest
-    container_name: speaker-mongo-express
-    ports:
-      - "8081:8081"
-    environment:
-      - ME_CONFIG_MONGODB_URL=${MONGODB_URI}
-      - ME_CONFIG_BASICAUTH_USERNAME=admin
-      - ME_CONFIG_BASICAUTH_PASSWORD=password
-    depends_on:
-      mongo:
-        condition: service_healthy
-    networks:
-      - speaker-net
-    restart: unless-stopped
-    profiles:
-      - debug
-
 networks:
   speaker-net:
     driver: bridge
@@ -105,7 +58,6 @@ networks:
       driver: default
 
 volumes:
-  mongo-data:
   audio-storage:
   models-cache:
 
