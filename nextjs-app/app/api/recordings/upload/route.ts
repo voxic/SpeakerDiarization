@@ -12,6 +12,34 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const files = formData.getAll('files') as File[];
     const language = formData.get('language') as string | null; // Language code or null/empty for auto-detect
+    const minSpeakersStr = formData.get('minSpeakers') as string | null;
+    const maxSpeakersStr = formData.get('maxSpeakers') as string | null;
+    
+    // Parse speaker counts
+    let minSpeakers: number | null = null;
+    let maxSpeakers: number | null = null;
+    
+    if (minSpeakersStr && minSpeakersStr.trim() !== '') {
+      const parsed = parseInt(minSpeakersStr, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        minSpeakers = parsed;
+      }
+    }
+    
+    if (maxSpeakersStr && maxSpeakersStr.trim() !== '') {
+      const parsed = parseInt(maxSpeakersStr, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        maxSpeakers = parsed;
+      }
+    }
+    
+    // Validate: max_speakers should be >= min_speakers if both are set
+    if (minSpeakers !== null && maxSpeakers !== null && maxSpeakers < minSpeakers) {
+      return NextResponse.json(
+        { error: 'Maximum speakers must be greater than or equal to minimum speakers' },
+        { status: 400 }
+      );
+    }
     
     if (!files || files.length === 0) {
       return NextResponse.json(
@@ -59,6 +87,8 @@ export async function POST(request: NextRequest) {
         durationSeconds: 0, // Will be updated after processing
         startTime,
         language: language && language.trim() !== '' ? language : null, // Store language or null for auto-detect
+        minSpeakers: minSpeakers, // Store min_speakers or null
+        maxSpeakers: maxSpeakers, // Store max_speakers or null
         status: 'pending' as const,
         progress: 0,
         errorMessage: null,
@@ -77,6 +107,8 @@ export async function POST(request: NextRequest) {
         progress: 0,
         errorMessage: null,
         language: language && language.trim() !== '' ? language : null, // Store language in job as well
+        minSpeakers: minSpeakers, // Store min_speakers in job
+        maxSpeakers: maxSpeakers, // Store max_speakers in job
         steps: [
           {
             name: 'diarization',

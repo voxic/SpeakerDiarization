@@ -30,6 +30,8 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [language, setLanguage] = useState<string>('')
+  const [minSpeakers, setMinSpeakers] = useState<string>('')
+  const [maxSpeakers, setMaxSpeakers] = useState<string>('')
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -57,6 +59,16 @@ export default function UploadPage() {
       return
     }
 
+    // Validate speaker counts
+    if (minSpeakers && maxSpeakers) {
+      const min = parseInt(minSpeakers, 10)
+      const max = parseInt(maxSpeakers, 10)
+      if (!isNaN(min) && !isNaN(max) && max < min) {
+        setError('Maximum speakers must be greater than or equal to minimum speakers')
+        return
+      }
+    }
+
     setUploading(true)
     setError(null)
 
@@ -69,6 +81,21 @@ export default function UploadPage() {
       // Add language if selected (empty string means auto-detect)
       if (language) {
         formData.append('language', language)
+      }
+      
+      // Add speaker count parameters if provided
+      if (minSpeakers && minSpeakers.trim() !== '') {
+        const min = parseInt(minSpeakers, 10)
+        if (!isNaN(min) && min > 0) {
+          formData.append('minSpeakers', minSpeakers)
+        }
+      }
+      
+      if (maxSpeakers && maxSpeakers.trim() !== '') {
+        const max = parseInt(maxSpeakers, 10)
+        if (!isNaN(max) && max > 0) {
+          formData.append('maxSpeakers', maxSpeakers)
+        }
       }
 
       const res = await fetch('/api/recordings/upload', {
@@ -147,6 +174,45 @@ export default function UploadPage() {
           </select>
           <p className="mt-2 text-xs text-gray-500">
             Select a language to lock transcription to that language, or leave as "Auto-detect" to let Whisper automatically detect the language.
+          </p>
+        </div>
+
+        <div className="bg-card-white rounded-lg p-4 border border-mongodb-border">
+          <label className="block text-sm font-medium text-gray-900 mb-3">
+            Speaker Count (Optional)
+          </label>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="minSpeakers" className="block text-xs font-medium text-gray-700 mb-1">
+                Minimum Speakers
+              </label>
+              <input
+                type="number"
+                id="minSpeakers"
+                min="1"
+                value={minSpeakers}
+                onChange={(e) => setMinSpeakers(e.target.value)}
+                placeholder="Auto"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label htmlFor="maxSpeakers" className="block text-xs font-medium text-gray-700 mb-1">
+                Maximum Speakers
+              </label>
+              <input
+                type="number"
+                id="maxSpeakers"
+                min="1"
+                value={maxSpeakers}
+                onChange={(e) => setMaxSpeakers(e.target.value)}
+                placeholder="Auto"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+              />
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-gray-500">
+            Set the expected number of speakers to improve diarization accuracy. Leave empty for auto-detection. Setting max_speakers is especially important for better results.
           </p>
         </div>
 

@@ -247,6 +247,31 @@ class AudioProcessor:
             else:
                 print("Transcription language: auto-detect", flush=True)
             
+            # Get speaker count parameters from job, recording, or None
+            # Priority: job > recording > None (auto-detect)
+            min_speakers = None
+            max_speakers = None
+            
+            if job.get('minSpeakers') is not None:
+                min_speakers = job['minSpeakers']
+            elif recording.get('minSpeakers') is not None:
+                min_speakers = recording['minSpeakers']
+            
+            if job.get('maxSpeakers') is not None:
+                max_speakers = job['maxSpeakers']
+            elif recording.get('maxSpeakers') is not None:
+                max_speakers = recording['maxSpeakers']
+            
+            if min_speakers is not None or max_speakers is not None:
+                speaker_info = []
+                if min_speakers is not None:
+                    speaker_info.append(f"min_speakers={min_speakers}")
+                if max_speakers is not None:
+                    speaker_info.append(f"max_speakers={max_speakers}")
+                print(f"Diarization speaker constraints: {', '.join(speaker_info)}", flush=True)
+            else:
+                print("Diarization speaker count: auto-detect", flush=True)
+            
             # Update status
             self.update_job_progress(job_id, 0, "running", recording_id)
             self.db.processingJobs.update_one(
@@ -267,7 +292,18 @@ class AudioProcessor:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 with redirect_stderr(stderr_buffer):
-                    diarization = self.diarization_pipeline(recording['filePath'])
+                    # Build diarization parameters
+                    diarization_params = {}
+                    if min_speakers is not None:
+                        diarization_params['min_speakers'] = min_speakers
+                    if max_speakers is not None:
+                        diarization_params['max_speakers'] = max_speakers
+                    
+                    # Call diarization pipeline with parameters
+                    if diarization_params:
+                        diarization = self.diarization_pipeline(recording['filePath'], **diarization_params)
+                    else:
+                        diarization = self.diarization_pipeline(recording['filePath'])
             
             # Count segments
             segment_list = list(diarization.itertracks())

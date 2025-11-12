@@ -8,6 +8,8 @@ export interface Recording {
   durationSeconds: number;
   startTime: Date;
   language?: string | null; // Language code for transcription (null = auto-detect)
+  minSpeakers?: number | null; // Minimum number of speakers for diarization
+  maxSpeakers?: number | null; // Maximum number of speakers for diarization
   status: 'pending' | 'processing' | 'completed' | 'failed';
   progress: number;
   errorMessage?: string;
@@ -64,6 +66,8 @@ export interface ProcessingJob {
   progress: number;
   errorMessage?: string;
   language?: string | null; // Language code for transcription (null = auto-detect)
+  minSpeakers?: number | null; // Minimum number of speakers for diarization
+  maxSpeakers?: number | null; // Maximum number of speakers for diarization
   steps: JobStep[];
   startedAt?: Date;
   completedAt?: Date;

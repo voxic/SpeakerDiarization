@@ -24,7 +24,7 @@ export async function POST(
     }
 
     // Create new processing job
-    // Preserve language from recording if it exists
+    // Preserve language and speaker count parameters from recording if they exist
     const job = {
       recordingId,
       jobType: 'full' as const,
@@ -32,6 +32,8 @@ export async function POST(
       progress: 0,
       errorMessage: null,
       language: recording.language || null, // Preserve language from recording
+      minSpeakers: recording.minSpeakers || null, // Preserve min_speakers from recording
+      maxSpeakers: recording.maxSpeakers || null, // Preserve max_speakers from recording
       steps: [
         {
           name: 'diarization',
