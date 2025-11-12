@@ -1,111 +1,42 @@
 # Quick Start Guide
 
-## Ubuntu 24.04 VM Preparation
-
-If you're setting up on a fresh Ubuntu 24.04 VM, you can use the automated deployment script:
+## System Setup
 
 ### Automated Setup (Recommended)
 
+Run the setup script to install all system dependencies:
+
 ```bash
-# Download and run the deployment script
-./deploy-ubuntu.sh
+./setup.sh
 ```
 
-The script will automatically:
-- Update system packages
-- Install Docker Engine and Docker Compose
-- Configure firewall rules
-- Install Git
-- Verify all installations
-
-**Note:** After running the script, if you were added to the docker group, you'll need to log out and log back in (or run `newgrp docker`) for the changes to take effect.
+This will install:
+- Node.js and npm
+- Python 3.11+ and pip
+- Docker (for MongoDB)
+- FFmpeg
+- Build tools
 
 ### Manual Setup
 
-If you prefer to set up manually, follow these steps:
-
-### 1. Update System Packages
-
+**Ubuntu/Debian:**
 ```bash
 sudo apt update
-sudo apt upgrade -y
-```
-
-### 2. Install Docker Engine
-
-```bash
-# Install prerequisites
-sudo apt install -y ca-certificates curl
-
-# Add Docker's official GPG key
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-# Add Docker repository
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# Install Docker Engine
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-```
-
-### 3. Install Docker Compose (standalone)
-
-If you need the standalone Docker Compose (in addition to the plugin):
-
-```bash
-# Download latest Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-```
-
-### 4. Add User to Docker Group
-
-```bash
-# Add your user to the docker group (replace $USER with your username if needed)
-sudo usermod -aG docker $USER
-
-# Log out and log back in for group changes to take effect
-# Or use: newgrp docker
-```
-
-### 5. Verify Installation
-
-```bash
-# Verify Docker is running
-sudo systemctl status docker
-
-# Enable Docker to start on boot
+sudo apt install -y python3.11 python3-pip python3-venv nodejs npm docker.io ffmpeg build-essential
 sudo systemctl enable docker
-
-# Test Docker installation
-docker --version
-docker compose version
+sudo systemctl start docker
+sudo usermod -aG docker $USER
+# Log out and log back in for docker group changes
 ```
 
-### 6. Configure Firewall (if enabled)
-
-If UFW is enabled, allow necessary ports:
-
+**macOS:**
 ```bash
-sudo ufw allow 3001/tcp  # Next.js web UI
-sudo ufw allow 27017/tcp # MongoDB (if accessing externally)
-sudo ufw allow 8081/tcp  # Mongo Express (if accessing externally)
-```
-
-### 7. Install Git (if not already installed)
-
-```bash
-sudo apt install -y git
+brew install node python@3.11 docker ffmpeg
 ```
 
 ## Prerequisites
 
-1. **Docker and Docker Compose** installed (see Ubuntu 24.04 VM Preparation above)
+1. **System dependencies** installed (see System Setup above)
 2. **HuggingFace Account** with access token
 
 ## Setup Steps
@@ -130,24 +61,31 @@ Edit `.env` and add your HuggingFace token:
 HUGGINGFACE_TOKEN=your_token_here
 ```
 
-### 3. Build and Start
+### 3. Start All Services
 
 ```bash
-# Build all services
-docker-compose build
-
-# Start services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
+./start.sh
 ```
+
+This will:
+- Start MongoDB (in Docker)
+- Build and start the Next.js application
+- Start the Python worker
 
 ### 4. Access the Application
 
 - **Web UI**: http://localhost:3001
 - **MongoDB**: mongodb://localhost:27017
-- **Mongo Express** (optional): http://localhost:8081
+
+### 5. View Logs
+
+```bash
+# View Next.js logs
+tail -f nextjs.log
+
+# View worker logs
+tail -f worker.log
+```
 
 ## First Upload
 
@@ -158,13 +96,28 @@ docker-compose logs -f
 4. Wait for processing to complete
 5. View results in the recordings list
 
+## Running Services Individually
+
+You can run services in separate terminals for better log visibility:
+
+```bash
+# Terminal 1: MongoDB
+./start-mongodb.sh
+
+# Terminal 2: Next.js
+./start-nextjs.sh
+
+# Terminal 3: Python Worker
+./start-worker.sh
+```
+
 ## Troubleshooting
 
 ### Worker not processing jobs
 
 Check worker logs:
 ```bash
-docker-compose logs -f worker
+tail -f worker.log
 ```
 
 Common issues:
@@ -172,34 +125,62 @@ Common issues:
 - Insufficient disk space
 - Model download in progress (first run takes longer)
 
+### Next.js not starting
+
+Check Next.js logs:
+```bash
+tail -f nextjs.log
+```
+
+Common issues:
+- Port 3001 already in use
+- Missing dependencies: run `cd nextjs-app && npm install`
+- Build required: run `cd nextjs-app && npm run build`
+
 ### MongoDB connection issues
 
-Check MongoDB logs:
+Check if MongoDB is running:
 ```bash
-docker-compose logs -f mongo
+docker ps | grep speaker-mongo
+```
+
+Start MongoDB:
+```bash
+./start-mongodb.sh
 ```
 
 Verify connection:
 ```bash
-docker-compose exec mongo mongosh speaker_db
-```
-
-### Next.js build errors
-
-Rebuild the Next.js service:
-```bash
-docker-compose build nextjs
-docker-compose up -d nextjs
+docker exec -it speaker-mongo mongosh speaker_db
 ```
 
 ## Stopping Services
 
+Stop all services:
 ```bash
-docker-compose down
+./stop.sh
 ```
 
-To also remove volumes (deletes all data):
+Stop individual services:
 ```bash
-docker-compose down -v
+# Stop Next.js (if running in foreground, use Ctrl+C)
+# Or kill the process: kill $(cat .nextjs.pid)
+
+# Stop Worker (if running in foreground, use Ctrl+C)
+# Or kill the process: kill $(cat .worker.pid)
+
+# Stop MongoDB
+docker stop speaker-mongo
 ```
 
+## Development Mode
+
+For development, you can run Next.js in dev mode:
+
+```bash
+cd nextjs-app
+npm install
+npm run dev
+```
+
+This will start Next.js in development mode with hot reloading on port 3000 (or the port specified in your environment).

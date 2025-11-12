@@ -11,100 +11,43 @@ A self-hosted speaker diarization and transcription system that processes multi-
 - Web UI for playback and speaker tagging
 - Automatic timestamp extraction from filenames (format: `YYYY-MM-DD_HH-MM-SS.ext`)
 - Audio segment playback by speaker
-- Docker-based deployment
-
-## Ubuntu 24.04 VM Preparation
-
-If you're setting up on a fresh Ubuntu 24.04 VM, follow these steps:
-
-### 1. Update System Packages
-
-```bash
-sudo apt update
-sudo apt upgrade -y
-```
-
-### 2. Install Docker Engine
-
-```bash
-# Install prerequisites
-sudo apt install -y ca-certificates curl
-
-# Add Docker's official GPG key
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-# Add Docker repository
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# Install Docker Engine
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-```
-
-### 3. Install Docker Compose (standalone)
-
-If you need the standalone Docker Compose (in addition to the plugin):
-
-```bash
-# Download latest Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-```
-
-### 4. Add User to Docker Group
-
-```bash
-# Add your user to the docker group
-sudo usermod -aG docker $USER
-
-# Log out and log back in for group changes to take effect
-# Or use: newgrp docker
-```
-
-### 5. Verify Installation
-
-```bash
-# Verify Docker is running
-sudo systemctl status docker
-
-# Enable Docker to start on boot
-sudo systemctl enable docker
-
-# Test Docker installation
-docker --version
-docker compose version
-```
-
-### 6. Configure Firewall (if enabled)
-
-If UFW is enabled, allow necessary ports:
-
-```bash
-sudo ufw allow 3001/tcp  # Next.js web UI
-sudo ufw allow 27017/tcp # MongoDB (if accessing externally)
-sudo ufw allow 8081/tcp  # Mongo Express (if accessing externally)
-```
-
-### 7. Install Git (if not already installed)
-
-```bash
-sudo apt install -y git
-```
+- Simple script-based deployment
 
 ## Prerequisites
 
-- Docker and Docker Compose (see Ubuntu 24.04 VM Preparation above)
-- HuggingFace account with access token (for pyannote.audio models)
-- At least 4 CPU cores and 8GB RAM (recommended: 8 cores, 16GB RAM)
+- **Node.js 20+** and npm
+- **Python 3.11+** with pip
+- **Docker** (for MongoDB - can also install MongoDB natively)
+- **FFmpeg 4.x** (for audio processing)
+- **HuggingFace account** with access token (for pyannote.audio models)
+- **At least 4 CPU cores and 8GB RAM** (recommended: 8 cores, 16GB RAM)
+
+### System Dependencies
+
+Run the setup script to install system dependencies:
+
+```bash
+./setup.sh
+```
+
+Or install manually:
+
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install -y python3.11 python3-pip python3-venv nodejs npm docker.io ffmpeg build-essential
+```
+
+**macOS:**
+```bash
+brew install node python@3.11 docker ffmpeg
+```
+
+**Note:** MongoDB runs in Docker by default. To install MongoDB natively instead, see the MongoDB documentation.
 
 ## Quick Start
 
-1. **Clone and configure:**
+1. **Configure environment:**
    ```bash
    cp .env.example .env
    # Edit .env and add your HUGGINGFACE_TOKEN
@@ -119,26 +62,54 @@ sudo apt install -y git
      - https://huggingface.co/pyannote/embedding
    - Add token to `.env` file
 
-3. **Build and start:**
+3. **Start all services:**
    ```bash
-   docker-compose build
-   docker-compose up -d
+   ./start.sh
    ```
+
+   This will:
+   - Start MongoDB (in Docker)
+   - Build and start the Next.js application
+   - Start the Python worker
 
 4. **Access the application:**
    - Web UI: http://localhost:3001
    - MongoDB: mongodb://localhost:27017
-   - Mongo Express (optional): http://localhost:8081
+
+5. **Stop all services:**
+   ```bash
+   ./stop.sh
+   ```
+
+### Running Services Individually
+
+You can also run services individually:
+
+```bash
+# Start MongoDB only
+./start-mongodb.sh
+
+# Start Next.js only (in a separate terminal)
+./start-nextjs.sh
+
+# Start Python worker only (in a separate terminal)
+./start-worker.sh
+```
 
 ## Project Structure
 
 ```
 speaker-diarization-system/
-├── docker-compose.yml
-├── .env
-├── .env.example
+├── .env                 # Environment configuration
+├── .env.example         # Environment template
+├── start.sh             # Start all services
+├── stop.sh              # Stop all services
+├── start-mongodb.sh     # Start MongoDB
+├── start-nextjs.sh      # Start Next.js app
+├── start-worker.sh      # Start Python worker
+├── setup.sh             # Install system dependencies
 ├── README.md
-├── mongo-init.js
+├── mongo-init.js        # MongoDB initialization
 ├── nextjs-app/          # Next.js frontend/backend
 └── python-worker/       # Audio processing worker
 ```
@@ -170,10 +141,52 @@ See the design document for complete API specifications.
 
 ## Troubleshooting
 
-- Check logs: `docker-compose logs -f worker`
-- Verify HuggingFace token is set correctly
+### Worker not processing jobs
+
+Check worker logs:
+```bash
+tail -f worker.log
+```
+
+Common issues:
+- Missing or invalid HuggingFace token
+- Insufficient disk space
+- Model download in progress (first run takes longer)
+
+### Next.js not starting
+
+Check Next.js logs:
+```bash
+tail -f nextjs.log
+```
+
+Common issues:
+- Port 3001 already in use
+- Missing dependencies: run `cd nextjs-app && npm install`
+- Build required: run `cd nextjs-app && npm run build`
+
+### MongoDB connection issues
+
+Check if MongoDB is running:
+```bash
+docker ps | grep speaker-mongo
+```
+
+Start MongoDB:
+```bash
+./start-mongodb.sh
+```
+
+Verify connection:
+```bash
+docker exec -it speaker-mongo mongosh speaker_db
+```
+
+### General
+
+- Verify HuggingFace token is set correctly in `.env`
 - Ensure sufficient disk space for audio files
-- Check MongoDB connection: `docker-compose exec mongo mongosh speaker_db`
+- Check that all required ports are available (3001, 27017)
 
 ## License
 
