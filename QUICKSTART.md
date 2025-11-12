@@ -92,7 +92,7 @@ docker compose version
 If UFW is enabled, allow necessary ports:
 
 ```bash
-sudo ufw allow 3000/tcp  # Next.js web UI
+sudo ufw allow 3001/tcp  # Next.js web UI
 sudo ufw allow 27017/tcp # MongoDB (if accessing externally)
 sudo ufw allow 8081/tcp  # Mongo Express (if accessing externally)
 ```
@@ -145,13 +145,13 @@ docker-compose logs -f
 
 ### 4. Access the Application
 
-- **Web UI**: http://localhost:3000
+- **Web UI**: http://localhost:3001
 - **MongoDB**: mongodb://localhost:27017
 - **Mongo Express** (optional): http://localhost:8081
 
 ## First Upload
 
-1. Go to http://localhost:3000
+1. Go to http://localhost:3001
 2. Click "Upload Recording"
 3. Upload an audio file with filename format: `YYYY-MM-DD_HH-MM-SS.ext`
    - Example: `2025-11-10_14-33-23.mp3`

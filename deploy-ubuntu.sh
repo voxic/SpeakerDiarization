@@ -123,7 +123,7 @@ log_info "Step 6/7: Configuring firewall..."
 if command -v ufw &> /dev/null; then
     if sudo ufw status | grep -q "Status: active"; then
         log_info "UFW is active. Configuring firewall rules..."
-        sudo ufw allow 3000/tcp comment "Next.js web UI"
+        sudo ufw allow 3001/tcp comment "Next.js web UI"
         sudo ufw allow 27017/tcp comment "MongoDB"
         sudo ufw allow 8081/tcp comment "Mongo Express"
         log_info "Firewall rules configured"

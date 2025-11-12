@@ -85,7 +85,7 @@ docker compose version
 If UFW is enabled, allow necessary ports:
 
 ```bash
-sudo ufw allow 3000/tcp  # Next.js web UI
+sudo ufw allow 3001/tcp  # Next.js web UI
 sudo ufw allow 27017/tcp # MongoDB (if accessing externally)
 sudo ufw allow 8081/tcp  # Mongo Express (if accessing externally)
 ```
@@ -126,7 +126,7 @@ sudo apt install -y git
    ```
 
 4. **Access the application:**
-   - Web UI: http://localhost:3000
+   - Web UI: http://localhost:3001
    - MongoDB: mongodb://localhost:27017
    - Mongo Express (optional): http://localhost:8081
 

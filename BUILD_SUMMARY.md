@@ -118,7 +118,7 @@ speaker-diarization-system/
 ### 4. Docker Configuration
 
 **Services:**
-- `nextjs` - Next.js application (port 3000)
+- `nextjs` - Next.js application (port 3001)
 - `worker` - Python worker service
 - `mongo` - MongoDB database (port 27017)
 - `mongo-express` - Database UI (port 8081, optional)

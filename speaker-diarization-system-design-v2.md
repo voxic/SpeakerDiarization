@@ -1127,13 +1127,13 @@ services:
       dockerfile: Dockerfile
     container_name: speaker-nextjs
     ports:
-      - "3000:3000"
+      - "3001:3001"
     environment:
       - MONGODB_URI=mongodb://mongo:27017/speaker_db
       - STORAGE_PATH=/app/storage
       - NODE_ENV=production
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_URL=http://localhost:3001
     volumes:
       - audio-storage:/app/storage
     depends_on:
@@ -1331,9 +1331,9 @@ RUN chown -R nextjs:nodejs /app/storage
 
 USER nextjs
 
-EXPOSE 3000
+EXPOSE 3001
 
-ENV PORT 3000
+ENV PORT 3001
 ENV HOSTNAME "0.0.0.0"
 
 CMD ["node", "server.js"]
@@ -1469,7 +1469,7 @@ MONGODB_URI=mongodb://mongo:27017/speaker_db
 
 # NextAuth (for authentication)
 NEXTAUTH_SECRET=your_random_secret_here
-NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_URL=http://localhost:3001
 
 # Storage
 STORAGE_PATH=/app/storage
@@ -1731,7 +1731,7 @@ docker-compose ps
 docker-compose logs -f
 
 # 6. Access application
-# Frontend/Web UI: http://localhost:3000
+# Frontend/Web UI: http://localhost:3001
 # MongoDB: mongodb://localhost:27017
 # Mongo Express (optional): http://localhost:8081
 ```
@@ -1973,7 +1973,7 @@ docker stats speaker-worker
 docker-compose up -d --build nextjs worker
 
 # Test upload via API
-curl -X POST http://localhost:3000/api/recordings/upload \
+curl -X POST http://localhost:3001/api/recordings/upload \
   -F "files=@2025-11-10_14-33-23.mp3"
 ```
 
