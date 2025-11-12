@@ -24,12 +24,14 @@ export async function POST(
     }
 
     // Create new processing job
+    // Preserve language from recording if it exists
     const job = {
       recordingId,
       jobType: 'full' as const,
       status: 'queued' as const,
       progress: 0,
       errorMessage: null,
+      language: recording.language || null, // Preserve language from recording
       steps: [
         {
           name: 'diarization',

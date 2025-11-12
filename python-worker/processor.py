@@ -50,7 +50,7 @@ class AudioProcessor:
     # Filename pattern for timestamp extraction
     FILENAME_PATTERN = r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})"
     
-    def __init__(self, mongodb_uri: str, hf_token: str):
+    def __init__(self, mongodb_uri: str, hf_token: str, language: str = None):
         print(f"Connecting to MongoDB at {mongodb_uri}...", flush=True)
         self.client = MongoClient(mongodb_uri, serverSelectionTimeoutMS=5000)
         self.db = self.client['speaker_db']
@@ -82,6 +82,17 @@ class AudioProcessor:
                 print("Continuing with environment variable authentication...", flush=True)
         else:
             print("huggingface_hub not available, using environment variables only", flush=True)
+        
+        # Get language from environment variable if not provided
+        if language is None:
+            language = os.getenv('WHISPER_LANGUAGE', None)
+        
+        # Store language for transcription (None = auto-detect)
+        self.language = language
+        if self.language:
+            print(f"Whisper language locked to: {self.language}", flush=True)
+        else:
+            print("Whisper language: auto-detect (no language lock)", flush=True)
         
         # Force CPU
         torch.set_num_threads(4)
@@ -221,6 +232,21 @@ class AudioProcessor:
             # Store recording_id for progress updates
             recording_id = recording['_id']
             
+            # Get language from job, recording, or fall back to instance default (from env var)
+            # Priority: job.language > recording.language > self.language (env var)
+            transcription_language = None
+            if job.get('language'):
+                transcription_language = job['language']
+            elif recording.get('language'):
+                transcription_language = recording['language']
+            else:
+                transcription_language = self.language  # Falls back to env var or None
+            
+            if transcription_language:
+                print(f"Transcription language: {transcription_language} (from {'job' if job.get('language') else 'recording' if recording.get('language') else 'environment'})", flush=True)
+            else:
+                print("Transcription language: auto-detect", flush=True)
+            
             # Update status
             self.update_job_progress(job_id, 0, "running", recording_id)
             self.db.processingJobs.update_one(
@@ -280,7 +306,8 @@ class AudioProcessor:
                 job_id, 
                 start_progress=60, 
                 end_progress=100,
-                recording_id=recording_id
+                recording_id=recording_id,
+                language=transcription_language
             )
             print("✓ Transcription completed for all segments", flush=True)
             self.update_job_step(job_id, "transcription", "completed", 100)
@@ -339,12 +366,20 @@ class AudioProcessor:
         job_id, 
         start_progress=60, 
         end_progress=100,
-        recording_id=None
+        recording_id=None,
+        language=None
     ):
-        """Transcribe all segments with progress updates"""
+        """Transcribe all segments with progress updates
+        
+        Args:
+            language: Language code to use for transcription. If None, uses self.language (from env var) or auto-detects.
+        """
         total_segments = len(segments)
         if total_segments == 0:
             return
+        
+        # Use provided language, or fall back to instance language (from env var)
+        transcription_language = language if language is not None else self.language
         
         progress_range = end_progress - start_progress
         
@@ -353,11 +388,18 @@ class AudioProcessor:
                 print(f"  Transcribing segment {idx + 1}/{total_segments}...", flush=True)
             try:
                 # Transcribe segment
+                transcribe_params = {
+                    "beam_size": 1,
+                    "best_of": 1,
+                    "vad_filter": True
+                }
+                # Add language parameter if specified (locks transcription to specific language)
+                if transcription_language:
+                    transcribe_params["language"] = transcription_language
+                
                 result, info = self.whisper.transcribe(
                     segment['segmentAudioPath'],
-                    beam_size=1,
-                    best_of=1,
-                    vad_filter=True
+                    **transcribe_params
                 )
                 
                 # Collect transcription

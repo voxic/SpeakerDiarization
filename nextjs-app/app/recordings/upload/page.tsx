@@ -3,11 +3,33 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+// Common language codes for Whisper
+const LANGUAGES = [
+  { code: '', label: 'Auto-detect (default)' },
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'it', label: 'Italian' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'ru', label: 'Russian' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'zh', label: 'Chinese' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'nl', label: 'Dutch' },
+  { code: 'pl', label: 'Polish' },
+  { code: 'sv', label: 'Swedish' },
+  { code: 'tr', label: 'Turkish' },
+  { code: 'ko', label: 'Korean' },
+  { code: 'hi', label: 'Hindi' },
+]
+
 export default function UploadPage() {
   const router = useRouter()
   const [files, setFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [language, setLanguage] = useState<string>('')
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -43,6 +65,11 @@ export default function UploadPage() {
       files.forEach(file => {
         formData.append('files', file)
       })
+      
+      // Add language if selected (empty string means auto-detect)
+      if (language) {
+        formData.append('language', language)
+      }
 
       const res = await fetch('/api/recordings/upload', {
         method: 'POST',
@@ -101,6 +128,27 @@ export default function UploadPage() {
             </ul>
           </div>
         )}
+
+        <div className="bg-card-white rounded-lg p-4 border border-mongodb-border">
+          <label htmlFor="language" className="block text-sm font-medium text-gray-900 mb-2">
+            Transcription Language
+          </label>
+          <select
+            id="language"
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+          >
+            {LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-2 text-xs text-gray-500">
+            Select a language to lock transcription to that language, or leave as "Auto-detect" to let Whisper automatically detect the language.
+          </p>
+        </div>
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">

@@ -47,8 +47,11 @@ def worker_loop():
     client = check_mongodb_connection(mongodb_uri)
     db = client['speaker_db']
     
+    # Get language from environment variable (optional, defaults to None for auto-detect)
+    whisper_language = os.getenv('WHISPER_LANGUAGE', None)
+    
     print("Initializing audio processor...")
-    processor = AudioProcessor(mongodb_uri, hf_token)
+    processor = AudioProcessor(mongodb_uri, hf_token, language=whisper_language)
     print("Audio processor initialized. Starting worker loop...")
     
     while True:

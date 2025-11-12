@@ -108,6 +108,9 @@ sudo apt install -y git
    ```bash
    cp .env.example .env
    # Edit .env and add your HUGGINGFACE_TOKEN
+   # Optionally set WHISPER_LANGUAGE to lock transcription to a specific language
+   # Examples: "en" (English), "es" (Spanish), "fr" (French), "de" (German), etc.
+   # Leave unset for auto-detection (default)
    ```
 
 2. **Get HuggingFace Token:**
@@ -167,6 +170,35 @@ See the design document for complete API specifications.
 - **Processing Speed:** ~50-75 seconds per minute of audio (base Whisper model)
 - **CPU Requirements:** 4+ cores recommended
 - **Memory:** 8GB+ recommended per worker
+
+## Configuration
+
+### Language Locking
+
+By default, Whisper auto-detects the language in your audio. To lock transcription to a specific language, set the `WHISPER_LANGUAGE` environment variable:
+
+```bash
+# In your .env file or docker-compose.yml
+WHISPER_LANGUAGE=en  # English
+WHISPER_LANGUAGE=es  # Spanish
+WHISPER_LANGUAGE=fr  # French
+WHISPER_LANGUAGE=de  # German
+# ... etc (see Whisper supported languages)
+```
+
+**Common language codes:**
+- `en` - English
+- `es` - Spanish
+- `fr` - French
+- `de` - German
+- `it` - Italian
+- `pt` - Portuguese
+- `ru` - Russian
+- `ja` - Japanese
+- `zh` - Chinese
+- `ar` - Arabic
+
+If `WHISPER_LANGUAGE` is not set, Whisper will auto-detect the language (default behavior).
 
 ## Troubleshooting
 

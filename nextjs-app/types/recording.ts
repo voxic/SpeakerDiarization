@@ -7,6 +7,7 @@ export interface Recording {
   fileSize: number;
   durationSeconds: number;
   startTime: Date;
+  language?: string | null; // Language code for transcription (null = auto-detect)
   status: 'pending' | 'processing' | 'completed' | 'failed';
   progress: number;
   errorMessage?: string;
@@ -62,6 +63,7 @@ export interface ProcessingJob {
   status: 'queued' | 'running' | 'completed' | 'failed';
   progress: number;
   errorMessage?: string;
+  language?: string | null; // Language code for transcription (null = auto-detect)
   steps: JobStep[];
   startedAt?: Date;
   completedAt?: Date;

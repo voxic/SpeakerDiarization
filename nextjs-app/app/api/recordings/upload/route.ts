@@ -11,6 +11,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const files = formData.getAll('files') as File[];
+    const language = formData.get('language') as string | null; // Language code or null/empty for auto-detect
     
     if (!files || files.length === 0) {
       return NextResponse.json(
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
         fileSize: buffer.length,
         durationSeconds: 0, // Will be updated after processing
         startTime,
+        language: language && language.trim() !== '' ? language : null, // Store language or null for auto-detect
         status: 'pending' as const,
         progress: 0,
         errorMessage: null,
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
         status: 'queued' as const,
         progress: 0,
         errorMessage: null,
+        language: language && language.trim() !== '' ? language : null, // Store language in job as well
         steps: [
           {
             name: 'diarization',
