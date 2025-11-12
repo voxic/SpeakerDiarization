@@ -58,6 +58,7 @@ services:
   mongo:
     image: mongo:7
     container_name: speaker-mongo
+    hostname: mongo
     ports:
       - "27017:27017"
     environment:
@@ -66,10 +67,12 @@ services:
       - mongo-data:/data/db
       - ./mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
     networks:
-      - speaker-net
+      speaker-net:
+        aliases:
+          - mongo
     restart: unless-stopped
     healthcheck:
-      test: mongosh --eval "db.adminCommand('ping')" --quiet
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -97,6 +100,9 @@ services:
 networks:
   speaker-net:
     driver: bridge
+    name: speaker-net
+    ipam:
+      driver: default
 
 volumes:
   mongo-data:
