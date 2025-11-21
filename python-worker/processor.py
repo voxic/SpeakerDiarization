@@ -49,6 +49,37 @@ from pyannote.audio import Pipeline
 class AudioProcessor:
     # Filename pattern for timestamp extraction
     FILENAME_PATTERN = r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})"
+    DEFAULT_CPU_THREADS = 4
+    DEFAULT_WHISPER_MODEL = "base"
+    DEFAULT_WHISPER_DEVICE = "cpu"
+    DEFAULT_WHISPER_COMPUTE_TYPE = "int8"
+    DEFAULT_WHISPER_BEAM_SIZE = 1
+    DEFAULT_WHISPER_BEST_OF = 1
+    DEFAULT_WHISPER_VAD_FILTER = True
+
+    @staticmethod
+    def _get_env_int(var_name: str, default: int) -> int:
+        value = os.getenv(var_name)
+        if value is None:
+            return default
+        try:
+            parsed = int(value)
+            if parsed <= 0:
+                raise ValueError
+            return parsed
+        except ValueError:
+            print(
+                f"Invalid integer for {var_name}='{value}', using default {default}",
+                flush=True
+            )
+            return default
+
+    @staticmethod
+    def _get_env_bool(var_name: str, default: bool) -> bool:
+        value = os.getenv(var_name)
+        if value is None:
+            return default
+        return value.strip().lower() in ("1", "true", "yes", "on")
     
     def __init__(self, mongodb_uri: str, hf_token: str, language: str = None):
         print(f"Connecting to MongoDB at {mongodb_uri}...", flush=True)
@@ -94,8 +125,56 @@ class AudioProcessor:
         else:
             print("Whisper language: auto-detect (no language lock)", flush=True)
         
-        # Force CPU
-        torch.set_num_threads(4)
+        # Performance configuration (controlled via environment variables)
+        self.cpu_threads = self._get_env_int(
+            "AUDIO_PROCESSOR_CPU_THREADS",
+            self.DEFAULT_CPU_THREADS
+        )
+        self.whisper_cpu_threads = self._get_env_int(
+            "WHISPER_CPU_THREADS",
+            self.cpu_threads
+        )
+        torch.set_num_threads(self.cpu_threads)
+        print(
+            f"CPU threads: core={self.cpu_threads}, whisper={self.whisper_cpu_threads}",
+            flush=True
+        )
+        self.whisper_model_name = os.getenv(
+            "WHISPER_MODEL_NAME",
+            self.DEFAULT_WHISPER_MODEL
+        )
+        self.whisper_device = os.getenv(
+            "WHISPER_DEVICE",
+            self.DEFAULT_WHISPER_DEVICE
+        )
+        self.whisper_compute_type = os.getenv(
+            "WHISPER_COMPUTE_TYPE",
+            self.DEFAULT_WHISPER_COMPUTE_TYPE
+        )
+        self.whisper_transcribe_params = {
+            "beam_size": self._get_env_int(
+                "WHISPER_BEAM_SIZE",
+                self.DEFAULT_WHISPER_BEAM_SIZE
+            ),
+            "best_of": self._get_env_int(
+                "WHISPER_BEST_OF",
+                self.DEFAULT_WHISPER_BEST_OF
+            ),
+            "vad_filter": self._get_env_bool(
+                "WHISPER_VAD_FILTER",
+                self.DEFAULT_WHISPER_VAD_FILTER
+            )
+        }
+        print(
+            "Whisper config -> "
+            f"model={self.whisper_model_name}, "
+            f"device={self.whisper_device}, "
+            f"compute_type={self.whisper_compute_type}, "
+            f"beam_size={self.whisper_transcribe_params['beam_size']}, "
+            f"best_of={self.whisper_transcribe_params['best_of']}, "
+            f"vad_filter={self.whisper_transcribe_params['vad_filter']}",
+            flush=True
+        )
         
         # Initialize models
         print("Loading diarization pipeline...", flush=True)
@@ -120,10 +199,10 @@ class AudioProcessor:
         
         print("Loading Whisper model...", flush=True)
         self.whisper = WhisperModel(
-            "base",  # Change to "tiny" for faster processing
-            device="cpu",
-            compute_type="int8",
-            cpu_threads=4
+            self.whisper_model_name,
+            device=self.whisper_device,
+            compute_type=self.whisper_compute_type,
+            cpu_threads=self.whisper_cpu_threads
         )
         print("Whisper model loaded", flush=True)
     
@@ -424,11 +503,7 @@ class AudioProcessor:
                 print(f"  Transcribing segment {idx + 1}/{total_segments}...", flush=True)
             try:
                 # Transcribe segment
-                transcribe_params = {
-                    "beam_size": 1,
-                    "best_of": 1,
-                    "vad_filter": True
-                }
+                transcribe_params = dict(self.whisper_transcribe_params)
                 # Add language parameter if specified (locks transcription to specific language)
                 if transcription_language:
                     transcribe_params["language"] = transcription_language

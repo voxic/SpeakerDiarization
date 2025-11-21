@@ -130,6 +130,19 @@ Edit `.env` and add your HuggingFace token:
 HUGGINGFACE_TOKEN=your_token_here
 ```
 
+Optional performance overrides (add as needed):
+```
+AUDIO_PROCESSOR_CPU_THREADS=8
+WHISPER_CPU_THREADS=8
+WHISPER_MODEL_NAME=base
+WHISPER_COMPUTE_TYPE=int8
+WHISPER_BEAM_SIZE=1
+WHISPER_BEST_OF=1
+WHISPER_VAD_FILTER=true
+```
+
+See `README.md` for the full list and guidance on choosing values for your hardware.
+
 ### 3. Build and Start
 
 ```bash

@@ -200,6 +200,21 @@ WHISPER_LANGUAGE=de  # German
 
 If `WHISPER_LANGUAGE` is not set, Whisper will auto-detect the language (default behavior).
 
+### Performance Tuning
+
+You can control CPU usage and Whisper behavior through environment variables:
+
+- `AUDIO_PROCESSOR_CPU_THREADS`: threads used by PyTorch/pyannote (default 4)
+- `WHISPER_CPU_THREADS`: threads dedicated to Whisper (defaults to `AUDIO_PROCESSOR_CPU_THREADS`)
+- `WHISPER_MODEL_NAME`: Whisper model size (`tiny`, `base`, `small`, `medium`, etc.; default `base`)
+- `WHISPER_DEVICE`: device Whisper runs on (`cpu`, `cuda`, etc.; default `cpu`)
+- `WHISPER_COMPUTE_TYPE`: compute precision (e.g., `int8`, `int16`, `float16`; default `int8`)
+- `WHISPER_BEAM_SIZE`: beam search width (default 1)
+- `WHISPER_BEST_OF`: number of candidates to sample before filtering (default 1)
+- `WHISPER_VAD_FILTER`: enable VAD pre-filtering (`true`/`false`; default `true`)
+
+Update these in `.env` or your deployment environment to match your hardware. Larger models and higher beam sizes improve accuracy at the cost of speed/CPU.
+
 ## Troubleshooting
 
 - Check logs: `docker-compose logs -f worker`
