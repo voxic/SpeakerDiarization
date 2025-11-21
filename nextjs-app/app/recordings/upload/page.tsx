@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 // Common language codes for Whisper
@@ -32,6 +32,19 @@ export default function UploadPage() {
   const [language, setLanguage] = useState<string>('')
   const [minSpeakers, setMinSpeakers] = useState<string>('')
   const [maxSpeakers, setMaxSpeakers] = useState<string>('')
+  const [meetingName, setMeetingName] = useState<string>('')
+  const [meetingDateTime, setMeetingDateTime] = useState<string>(() => {
+    const now = new Date()
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+    return now.toISOString().slice(0, 16)
+  })
+
+  const formattedMeetingSummary = useMemo(() => {
+    if (!meetingName || !meetingDateTime) return null
+    const date = new Date(meetingDateTime)
+    if (Number.isNaN(date.getTime())) return null
+    return `${meetingName} • ${date.toLocaleString()}`
+  }, [meetingName, meetingDateTime])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -59,6 +72,22 @@ export default function UploadPage() {
       return
     }
 
+    if (!meetingName.trim()) {
+      setError('Please provide a meeting name')
+      return
+    }
+
+    if (!meetingDateTime) {
+      setError('Please select the meeting date and time')
+      return
+    }
+
+    const meetingDate = new Date(meetingDateTime)
+    if (Number.isNaN(meetingDate.getTime())) {
+      setError('Meeting date and time is invalid')
+      return
+    }
+
     // Validate speaker counts
     if (minSpeakers && maxSpeakers) {
       const min = parseInt(minSpeakers, 10)
@@ -77,6 +106,9 @@ export default function UploadPage() {
       files.forEach(file => {
         formData.append('files', file)
       })
+
+      formData.append('meetingName', meetingName.trim())
+      formData.append('meetingDateTime', meetingDate.toISOString())
       
       // Add language if selected (empty string means auto-detect)
       if (language) {
@@ -147,7 +179,12 @@ export default function UploadPage() {
 
         {files.length > 0 && (
           <div className="bg-gray-50 rounded-lg p-4">
-            <h3 className="font-semibold mb-2 text-gray-900">Selected files:</h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-gray-900">Selected files</h3>
+              {formattedMeetingSummary && (
+                <p className="text-xs text-gray-500">{formattedMeetingSummary}</p>
+              )}
+            </div>
             <ul className="list-disc list-inside space-y-1">
               {files.map((file, idx) => (
                 <li key={idx} className="text-sm text-gray-700">{file.name}</li>
@@ -155,6 +192,42 @@ export default function UploadPage() {
             </ul>
           </div>
         )}
+
+        <div className="bg-card-white rounded-lg p-4 border border-mongodb-border">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Meeting Details</h2>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="meetingName" className="block text-sm font-medium text-gray-700 mb-1">
+                Meeting Name
+              </label>
+              <input
+                type="text"
+                id="meetingName"
+                value={meetingName}
+                onChange={(e) => setMeetingName(e.target.value)}
+                placeholder="e.g., Quarterly Sales Review"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="meetingDateTime" className="block text-sm font-medium text-gray-700 mb-1">
+                Meeting Date &amp; Time
+              </label>
+              <input
+                type="datetime-local"
+                id="meetingDateTime"
+                value={meetingDateTime}
+                onChange={(e) => setMeetingDateTime(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+                required
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Date/time is stored in UTC. We&apos;ll convert from your local time automatically.
+              </p>
+            </div>
+          </div>
+        </div>
 
         <div className="bg-card-white rounded-lg p-4 border border-mongodb-border">
           <label htmlFor="language" className="block text-sm font-medium text-gray-900 mb-2">

@@ -3,6 +3,7 @@ import time
 import os
 import sys
 import warnings
+import platform
 from contextlib import redirect_stderr
 from io import StringIO
 from pathlib import Path
@@ -139,17 +140,18 @@ class AudioProcessor:
             f"CPU threads: core={self.cpu_threads}, whisper={self.whisper_cpu_threads}",
             flush=True
         )
+        self.hardware_preferences = self._detect_hardware_preferences()
         self.whisper_model_name = os.getenv(
             "WHISPER_MODEL_NAME",
             self.DEFAULT_WHISPER_MODEL
         )
         self.whisper_device = os.getenv(
             "WHISPER_DEVICE",
-            self.DEFAULT_WHISPER_DEVICE
+            self.hardware_preferences["device"]
         )
         self.whisper_compute_type = os.getenv(
             "WHISPER_COMPUTE_TYPE",
-            self.DEFAULT_WHISPER_COMPUTE_TYPE
+            self.hardware_preferences["compute_type"]
         )
         self.whisper_transcribe_params = {
             "beam_size": self._get_env_int(
@@ -173,6 +175,11 @@ class AudioProcessor:
             f"beam_size={self.whisper_transcribe_params['beam_size']}, "
             f"best_of={self.whisper_transcribe_params['best_of']}, "
             f"vad_filter={self.whisper_transcribe_params['vad_filter']}",
+            flush=True
+        )
+        print(
+            f"Hardware detection: {self.hardware_preferences['description']} "
+            f"(env overrides applied: {'WHISPER_DEVICE' in os.environ or 'WHISPER_COMPUTE_TYPE' in os.environ})",
             flush=True
         )
         
@@ -205,6 +212,49 @@ class AudioProcessor:
             cpu_threads=self.whisper_cpu_threads
         )
         print("Whisper model loaded", flush=True)
+
+    def _detect_hardware_preferences(self):
+        """Detect optimal Whisper device/compute type based on host hardware."""
+        hardware = {
+            "device": self.DEFAULT_WHISPER_DEVICE,
+            "compute_type": self.DEFAULT_WHISPER_COMPUTE_TYPE,
+            "description": "CPU (default configuration)"
+        }
+
+        try:
+            if torch.cuda.is_available():
+                gpu_name = torch.cuda.get_device_name(0)
+                capability = torch.cuda.get_device_capability(0)
+                hardware.update({
+                    "device": "cuda",
+                    "compute_type": "float16",
+                    "description": f"CUDA GPU detected: {gpu_name} (capability {capability[0]}.{capability[1]})"
+                })
+                return hardware
+        except Exception as cuda_error:
+            print(f"Warning: CUDA detection failed: {cuda_error}", flush=True)
+
+        mps_backend = getattr(torch.backends, "mps", None)
+        if mps_backend and mps_backend.is_available():
+            hardware.update({
+                "device": "cpu",
+                "compute_type": "int8_float16",
+                "description": "Apple Silicon (MPS) detected"
+            })
+            return hardware
+
+        system_name = platform.system()
+        machine_name = platform.machine().lower()
+        if system_name == "Darwin" and machine_name in ("arm64", "aarch64"):
+            hardware.update({
+                "device": "cpu",
+                "compute_type": "int8",
+                "description": "Apple Silicon CPU detected (MPS unavailable)"
+            })
+            return hardware
+
+        hardware["description"] = f"CPU fallback ({system_name} / {machine_name})"
+        return hardware
     
     def extract_start_time(self, filename: str) -> datetime:
         """Extract start time from filename format: YYYY-MM-DD_HH-MM-SS.ext"""

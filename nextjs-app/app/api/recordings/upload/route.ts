@@ -7,13 +7,68 @@ import { saveFile } from '@/lib/storage';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
 
+interface UploadedRecording {
+  _id: string;
+  filename: string;
+  originalFilename: string;
+  filePath: string;
+  fileSize: number;
+  durationSeconds: number;
+  startTime: Date;
+  language: string | null;
+  minSpeakers: number | null;
+  maxSpeakers: number | null;
+  meetingId: ObjectId | null;
+  meetingName: string | null;
+  meetingScheduledAt: Date;
+  status: 'pending' | 'processing';
+  progress: number;
+  errorMessage: null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export async function POST(request: NextRequest) {
+  let meetingId: ObjectId | null = null;
+  const recordings: UploadedRecording[] = [];
+  let dbInstance: any = null;
+  const cleanupMeeting = async () => {
+    if (meetingId && recordings.length === 0 && dbInstance) {
+      await dbInstance.collection('meetings').deleteOne({ _id: meetingId });
+      meetingId = null;
+    }
+  };
+
   try {
     const formData = await request.formData();
     const files = formData.getAll('files') as File[];
     const language = formData.get('language') as string | null; // Language code or null/empty for auto-detect
     const minSpeakersStr = formData.get('minSpeakers') as string | null;
     const maxSpeakersStr = formData.get('maxSpeakers') as string | null;
+    const meetingName = (formData.get('meetingName') as string | null)?.trim();
+    const meetingDateTime = formData.get('meetingDateTime') as string | null;
+
+    if (!meetingName) {
+      return NextResponse.json(
+        { error: 'Meeting name is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!meetingDateTime) {
+      return NextResponse.json(
+        { error: 'Meeting date and time is required' },
+        { status: 400 }
+      );
+    }
+
+    const scheduledAt = new Date(meetingDateTime);
+    if (Number.isNaN(scheduledAt.getTime())) {
+      return NextResponse.json(
+        { error: 'Invalid meeting date and time' },
+        { status: 400 }
+      );
+    }
     
     // Parse speaker counts
     let minSpeakers: number | null = null;
@@ -49,7 +104,16 @@ export async function POST(request: NextRequest) {
     }
 
     const { db } = await connectToDatabase();
-    const recordings = [];
+    dbInstance = db;
+
+    const meetingResult = await db.collection('meetings').insertOne({
+      name: meetingName,
+      scheduledAt,
+      fileCount: files.length,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+    meetingId = meetingResult.insertedId;
 
     for (const file of files) {
       // Validate file type
@@ -67,6 +131,7 @@ export async function POST(request: NextRequest) {
       try {
         startTime = extractStartTimeFromFilename(file.name);
       } catch (error) {
+        await cleanupMeeting();
         return NextResponse.json(
           { error: `Invalid filename format: ${file.name}. Expected: YYYY-MM-DD_HH-MM-SS.ext` },
           { status: 400 }
@@ -79,7 +144,7 @@ export async function POST(request: NextRequest) {
       const filePath = await saveFile(buffer, savedFilename, 'recordings');
 
       // Create recording document
-      const recording = {
+      const recording: Omit<UploadedRecording, '_id'> = {
         filename: savedFilename,
         originalFilename: file.name,
         filePath,
@@ -89,6 +154,9 @@ export async function POST(request: NextRequest) {
         language: language && language.trim() !== '' ? language : null, // Store language or null for auto-detect
         minSpeakers: minSpeakers, // Store min_speakers or null
         maxSpeakers: maxSpeakers, // Store max_speakers or null
+        meetingId,
+        meetingName,
+        meetingScheduledAt: scheduledAt,
         status: 'pending' as const,
         progress: 0,
         errorMessage: null,
@@ -143,11 +211,31 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (recordings.length === 0) {
+      await cleanupMeeting();
+      return NextResponse.json(
+        { error: 'No valid files provided' },
+        { status: 400 }
+      );
+    }
+
+    if (meetingId) {
+      await db.collection('meetings').updateOne(
+        { _id: meetingId },
+        { $set: { fileCount: recordings.length, updatedAt: new Date() } }
+      );
+    }
+
     return NextResponse.json({
       success: true,
+      meetingId: meetingId?.toString(),
       recordings
     });
   } catch (error: any) {
+    if (meetingId && recordings.length === 0 && dbInstance) {
+      await dbInstance.collection('meetings').deleteOne({ _id: meetingId });
+    }
+    console.error('Upload failed:', error);
     return NextResponse.json(
       { error: error.message },
       { status: 500 }

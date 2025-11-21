@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { formatDuration } from '@/lib/utils'
@@ -21,6 +21,8 @@ interface Recording {
   progress: number
   durationSeconds: number
   startTime: string
+  meetingName?: string
+  meetingScheduledAt?: string
   segments: SpeakerSegment[]
   speakerTags?: SpeakerTag[]
 }
@@ -44,13 +46,7 @@ export default function RecordingDetailPage() {
   const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null)
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({})
 
-  useEffect(() => {
-    fetchRecording()
-    const interval = setInterval(fetchRecording, 5000)
-    return () => clearInterval(interval)
-  }, [params.id])
-
-  const fetchRecording = async () => {
+  const fetchRecording = useCallback(async () => {
     try {
       const res = await fetch(`/api/recordings/${params.id}`)
       const data = await res.json()
@@ -70,7 +66,13 @@ export default function RecordingDetailPage() {
       console.error('Error fetching recording:', error)
       setLoading(false)
     }
-  }
+  }, [params.id])
+
+  useEffect(() => {
+    fetchRecording()
+    const interval = setInterval(fetchRecording, 5000)
+    return () => clearInterval(interval)
+  }, [fetchRecording])
 
   const getSpeakerName = (speakerLabel: string): string => {
     return speakerNames[speakerLabel] || speakerLabel
@@ -164,6 +166,24 @@ export default function RecordingDetailPage() {
             </p>
           </div>
         </div>
+        {(recording.meetingName || recording.meetingScheduledAt) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            {recording.meetingName && (
+              <div>
+                <p className="text-sm text-gray-500">Meeting</p>
+                <p className="font-semibold text-gray-900">{recording.meetingName}</p>
+              </div>
+            )}
+            {recording.meetingScheduledAt && (
+              <div>
+                <p className="text-sm text-gray-500">Scheduled</p>
+                <p className="font-semibold text-gray-900">
+                  {new Date(recording.meetingScheduledAt).toLocaleString()}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
         {recording.status === 'completed' && (
           <div className="mt-4 pt-4 border-t border-gray-200">
             <h3 className="text-sm font-semibold text-gray-700 mb-2">Full Recording</h3>

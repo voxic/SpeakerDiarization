@@ -10,6 +10,9 @@ export interface Recording {
   language?: string | null; // Language code for transcription (null = auto-detect)
   minSpeakers?: number | null; // Minimum number of speakers for diarization
   maxSpeakers?: number | null; // Maximum number of speakers for diarization
+  meetingId?: string | null;
+  meetingName?: string | null;
+  meetingScheduledAt?: Date | string | null;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   progress: number;
   errorMessage?: string;
@@ -80,5 +83,13 @@ export interface SpeakerTag {
   speakerLabel: string;
   userAssignedName: string;
   createdAt: Date;
+}
+
+export interface Meeting {
+  _id: string;
+  name: string;
+  scheduledAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 

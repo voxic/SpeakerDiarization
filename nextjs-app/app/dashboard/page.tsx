@@ -13,6 +13,8 @@ interface Recording {
   durationSeconds: number
   fileSize: number
   createdAt: string
+  meetingName?: string
+  meetingScheduledAt?: string
 }
 
 export default function Dashboard() {
@@ -39,14 +41,22 @@ export default function Dashboard() {
 
   return (
     <div className="container mx-auto p-8">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col gap-4 md:flex-row md:justify-between md:items-center mb-8">
         <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-        <Link 
-          href="/recordings/upload"
-          className="bg-primary-blue text-white px-4 py-2 rounded-lg hover:bg-primary-blue-hover transition-colors"
-        >
-          Upload Recording
-        </Link>
+        <div className="flex gap-3">
+          <Link 
+            href="/meetings"
+            className="bg-card-white text-gray-900 px-4 py-2 rounded-lg border border-mongodb-border hover:bg-gray-50 transition-colors"
+          >
+            View Meetings
+          </Link>
+          <Link 
+            href="/recordings/upload"
+            className="bg-primary-blue text-white px-4 py-2 rounded-lg hover:bg-primary-blue-hover transition-colors"
+          >
+            Upload Recording
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -79,6 +89,7 @@ export default function Dashboard() {
             <thead className="bg-table-header">
               <tr>
                 <th className="px-4 py-3 text-left text-gray-700 font-medium">Filename</th>
+                <th className="px-4 py-3 text-left text-gray-700 font-medium">Meeting</th>
                 <th className="px-4 py-3 text-left text-gray-700 font-medium">Status</th>
                 <th className="px-4 py-3 text-left text-gray-700 font-medium">Progress</th>
                 <th className="px-4 py-3 text-left text-gray-700 font-medium">Duration</th>
@@ -90,6 +101,20 @@ export default function Dashboard() {
               {recordings.map((recording) => (
                 <tr key={recording._id} className="border-t">
                   <td className="px-4 py-3 text-gray-900">{recording.originalFilename}</td>
+                  <td className="px-4 py-3 text-gray-700">
+                    {recording.meetingName ? (
+                      <div>
+                        <p className="font-medium text-gray-900">{recording.meetingName}</p>
+                        {recording.meetingScheduledAt && (
+                          <p className="text-xs text-gray-500">
+                            {new Date(recording.meetingScheduledAt).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-500">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-sm font-medium ${
                       recording.status === 'completed' ? 'bg-green-100 text-green-800' :

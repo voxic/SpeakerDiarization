@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { formatDuration, formatFileSize } from '@/lib/utils'
 
@@ -14,6 +14,8 @@ interface Recording {
   fileSize: number
   startTime: string
   createdAt: string
+  meetingName?: string
+  meetingScheduledAt?: string
 }
 
 export default function RecordingsPage() {
@@ -21,11 +23,7 @@ export default function RecordingsPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('')
 
-  useEffect(() => {
-    fetchRecordings()
-  }, [statusFilter])
-
-  const fetchRecordings = async () => {
+  const fetchRecordings = useCallback(async () => {
     try {
       const url = statusFilter 
         ? `/api/recordings?status=${statusFilter}&limit=100`
@@ -38,18 +36,30 @@ export default function RecordingsPage() {
       console.error('Error fetching recordings:', error)
       setLoading(false)
     }
-  }
+  }, [statusFilter])
+
+  useEffect(() => {
+    fetchRecordings()
+  }, [fetchRecordings])
 
   return (
     <div className="container mx-auto p-8">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col gap-4 md:flex-row md:justify-between md:items-center mb-8">
         <h1 className="text-3xl font-bold text-white">Recordings</h1>
-        <Link 
-          href="/recordings/upload"
-          className="bg-primary-blue text-white px-4 py-2 rounded-lg hover:bg-primary-blue-hover transition-colors"
-        >
-          Upload Recording
-        </Link>
+        <div className="flex gap-3">
+          <Link 
+            href="/meetings"
+            className="bg-card-white text-gray-900 px-4 py-2 rounded-lg border border-mongodb-border hover:bg-gray-50 transition-colors"
+          >
+            View Meetings
+          </Link>
+          <Link 
+            href="/recordings/upload"
+            className="bg-primary-blue text-white px-4 py-2 rounded-lg hover:bg-primary-blue-hover transition-colors"
+          >
+            Upload Recording
+          </Link>
+        </div>
       </div>
 
       <div className="mb-4">
@@ -77,6 +87,7 @@ export default function RecordingsPage() {
             <thead className="bg-table-header">
               <tr>
                 <th className="px-4 py-3 text-left text-gray-700 font-medium">Filename</th>
+                <th className="px-4 py-3 text-left text-gray-700 font-medium">Meeting</th>
                 <th className="px-4 py-3 text-left text-gray-700 font-medium">Start Time</th>
                 <th className="px-4 py-3 text-left text-gray-700 font-medium">Status</th>
                 <th className="px-4 py-3 text-left text-gray-700 font-medium">Progress</th>
@@ -89,6 +100,20 @@ export default function RecordingsPage() {
               {recordings.map((recording) => (
                 <tr key={recording._id} className="border-t hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-900">{recording.originalFilename}</td>
+                  <td className="px-4 py-3 text-gray-700">
+                    {recording.meetingName ? (
+                      <div>
+                        <p className="font-medium text-gray-900">{recording.meetingName}</p>
+                        {recording.meetingScheduledAt && (
+                          <p className="text-xs text-gray-500">
+                            {new Date(recording.meetingScheduledAt).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-500">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-700">
                     {recording.startTime 
                       ? new Date(recording.startTime).toLocaleString()
