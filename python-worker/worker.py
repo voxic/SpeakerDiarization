@@ -33,25 +33,20 @@ def check_mongodb_connection(mongodb_uri: str, max_retries: int = 5, retry_delay
 def worker_loop():
     """Main worker loop - polls MongoDB for jobs"""
     mongodb_uri = os.getenv("MONGODB_URI", "mongodb://mongo:27017/speaker_db")
-    # Support both HUGGINGFACE_TOKEN and HF_TOKEN for compatibility
-    hf_token = os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_TOKEN")
+    elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
     
-    if not hf_token:
-        raise ValueError("HUGGINGFACE_TOKEN or HF_TOKEN environment variable is required")
-    
-    # Set HF_TOKEN env var for huggingface_hub library
-    os.environ["HF_TOKEN"] = hf_token
-    os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
+    if not elevenlabs_api_key:
+        raise ValueError("ELEVENLABS_API_KEY environment variable is required")
     
     # Check MongoDB connection before proceeding
     client = check_mongodb_connection(mongodb_uri)
     db = client['speaker_db']
     
     # Get language from environment variable (optional, defaults to None for auto-detect)
-    whisper_language = os.getenv('WHISPER_LANGUAGE', None)
+    elevenlabs_language = os.getenv('ELEVENLABS_LANGUAGE', None)
     
     print("Initializing audio processor...")
-    processor = AudioProcessor(mongodb_uri, hf_token, language=whisper_language)
+    processor = AudioProcessor(mongodb_uri, elevenlabs_api_key, language=elevenlabs_language)
     print("Audio processor initialized. Starting worker loop...")
     
     while True:
@@ -86,4 +81,3 @@ def worker_loop():
 
 if __name__ == "__main__":
     worker_loop()
-

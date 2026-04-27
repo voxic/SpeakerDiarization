@@ -6,9 +6,15 @@
 
 ---
 
+> **⚠️ IMPORTANT NOTE:** This design document describes the original architecture using local ML models (Faster-Whisper and pyannote.audio). **The system has been migrated to use ElevenLabs Speech-to-Text API** for both diarization and transcription. This document is kept for historical reference. For current setup instructions, see `README.md` and `QUICKSTART.md`.
+
+---
+
 ## 1. Executive Summary
 
 This document outlines the design for a self-hosted speaker diarization and transcription system that processes multi-speaker audio recordings. The system will separate speakers, identify them against known voice profiles, transcribe speech, and provide a web interface for managing recordings and reviewing results.
+
+**Note:** The current implementation uses ElevenLabs Speech-to-Text API instead of local ML models. See `README.md` for current setup instructions.
 
 ### Key Features
 - Multi-speaker audio file upload and processing
@@ -23,8 +29,8 @@ This document outlines the design for a self-hosted speaker diarization and tran
 ### Technology Stack
 - **Frontend/Backend:** Next.js (React with API Routes)
 - **Database:** MongoDB (Native Driver)
-- **ML Models:** Faster-Whisper, pyannote.audio
-- **Processing:** CPU-optimized (no GPU required)
+- **ML Models:** ~~Faster-Whisper, pyannote.audio~~ **ElevenLabs Speech-to-Text API** (current implementation)
+- **Processing:** ~~CPU-optimized (no GPU required)~~ **Cloud-based via API** (current implementation)
 - **Queue:** BullMQ (Redis-backed) or MongoDB-based queue
 
 ---

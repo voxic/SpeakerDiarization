@@ -3,86 +3,30 @@ import time
 import os
 import sys
 import warnings
-import platform
 from contextlib import redirect_stderr
-from io import StringIO
+from io import StringIO, BytesIO
 from pathlib import Path
 from datetime import datetime, timedelta
 from pymongo import MongoClient
 from bson import ObjectId
-import torch
-from faster_whisper import WhisperModel
 import numpy as np
 import re
 import soundfile as sf
 import librosa
+from elevenlabs.client import ElevenLabs
 
 # Suppress librosa and soundfile warnings about duration estimation
 warnings.filterwarnings('ignore', message='.*Estimating duration from bitrate.*')
 warnings.filterwarnings('ignore', category=UserWarning, module='librosa')
 warnings.filterwarnings('ignore', category=UserWarning, module='soundfile')
-# Suppress warnings from pyannote audio processing
-warnings.filterwarnings('ignore', message='.*duration.*', category=UserWarning)
-# Suppress pyannote deprecation warnings
-warnings.filterwarnings('ignore', message='.*torchaudio.*deprecated.*', category=UserWarning)
-warnings.filterwarnings('ignore', message='.*torchaudio._backend.*', category=UserWarning)
-warnings.filterwarnings('ignore', message='.*torchaudio.backend.common.*', category=UserWarning)
-warnings.filterwarnings('ignore', message='.*speechbrain.pretrained.*deprecated.*', category=UserWarning)
-warnings.filterwarnings('ignore', message='.*Module.*speechbrain.*was deprecated.*', category=UserWarning)
-# Suppress all UserWarnings from pyannote modules
-warnings.filterwarnings('ignore', category=UserWarning, module='pyannote')
-
 # Set environment variable to suppress soundfile warnings
 os.environ['SOUNDFILE_VERBOSE'] = '0'
-
-# Import huggingface_hub for authentication
-try:
-    from huggingface_hub import login
-    import huggingface_hub
-    HUGGINGFACE_HUB_AVAILABLE = True
-except ImportError:
-    HUGGINGFACE_HUB_AVAILABLE = False
-    print("WARNING: huggingface_hub not available, authentication may fail")
-
-# Import pyannote after setting up authentication
-from pyannote.audio import Pipeline
 
 class AudioProcessor:
     # Filename pattern for timestamp extraction
     FILENAME_PATTERN = r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})"
-    DEFAULT_CPU_THREADS = 4
-    DEFAULT_WHISPER_MODEL = "base"
-    DEFAULT_WHISPER_DEVICE = "cpu"
-    DEFAULT_WHISPER_COMPUTE_TYPE = "int8"
-    DEFAULT_WHISPER_BEAM_SIZE = 1
-    DEFAULT_WHISPER_BEST_OF = 1
-    DEFAULT_WHISPER_VAD_FILTER = True
 
-    @staticmethod
-    def _get_env_int(var_name: str, default: int) -> int:
-        value = os.getenv(var_name)
-        if value is None:
-            return default
-        try:
-            parsed = int(value)
-            if parsed <= 0:
-                raise ValueError
-            return parsed
-        except ValueError:
-            print(
-                f"Invalid integer for {var_name}='{value}', using default {default}",
-                flush=True
-            )
-            return default
-
-    @staticmethod
-    def _get_env_bool(var_name: str, default: bool) -> bool:
-        value = os.getenv(var_name)
-        if value is None:
-            return default
-        return value.strip().lower() in ("1", "true", "yes", "on")
-    
-    def __init__(self, mongodb_uri: str, hf_token: str, language: str = None):
+    def __init__(self, mongodb_uri: str, elevenlabs_api_key: str, language: str = None):
         print(f"Connecting to MongoDB at {mongodb_uri}...", flush=True)
         self.client = MongoClient(mongodb_uri, serverSelectionTimeoutMS=5000)
         self.db = self.client['speaker_db']
@@ -94,167 +38,25 @@ class AudioProcessor:
         except Exception as e:
             raise ConnectionError(f"Failed to connect to MongoDB in AudioProcessor: {e}")
         
-        if not hf_token:
-            raise ValueError("HuggingFace token is required")
+        if not elevenlabs_api_key:
+            raise ValueError("ElevenLabs API key is required")
         
-        # Set HuggingFace token as environment variable for huggingface_hub
-        # This must be done BEFORE any huggingface_hub operations
-        os.environ["HF_TOKEN"] = hf_token
-        os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
-        
-        # Authenticate with HuggingFace Hub before loading models
-        print(f"Authenticating with HuggingFace (token: {hf_token[:10]}...)...", flush=True)
-        if HUGGINGFACE_HUB_AVAILABLE:
-            try:
-                # Login to HuggingFace Hub - this sets the token globally
-                login(token=hf_token, add_to_git_credential=False)
-                print("HuggingFace authentication successful", flush=True)
-            except Exception as e:
-                print(f"Warning: HuggingFace login failed: {e}", flush=True)
-                print("Continuing with environment variable authentication...", flush=True)
-        else:
-            print("huggingface_hub not available, using environment variables only", flush=True)
+        # Initialize ElevenLabs client
+        print(f"Initializing ElevenLabs client...", flush=True)
+        self.elevenlabs = ElevenLabs(api_key=elevenlabs_api_key)
+        print("✓ ElevenLabs client initialized", flush=True)
         
         # Get language from environment variable if not provided
         if language is None:
-            language = os.getenv('WHISPER_LANGUAGE', None)
+            language = os.getenv('ELEVENLABS_LANGUAGE', None)
         
         # Store language for transcription (None = auto-detect)
+        # ElevenLabs uses language codes like "eng", "es", "fr", etc.
         self.language = language
         if self.language:
-            print(f"Whisper language locked to: {self.language}", flush=True)
+            print(f"Transcription language locked to: {self.language}", flush=True)
         else:
-            print("Whisper language: auto-detect (no language lock)", flush=True)
-        
-        # Performance configuration (controlled via environment variables)
-        self.cpu_threads = self._get_env_int(
-            "AUDIO_PROCESSOR_CPU_THREADS",
-            self.DEFAULT_CPU_THREADS
-        )
-        self.whisper_cpu_threads = self._get_env_int(
-            "WHISPER_CPU_THREADS",
-            self.cpu_threads
-        )
-        torch.set_num_threads(self.cpu_threads)
-        print(
-            f"CPU threads: core={self.cpu_threads}, whisper={self.whisper_cpu_threads}",
-            flush=True
-        )
-        self.hardware_preferences = self._detect_hardware_preferences()
-        self.whisper_model_name = os.getenv(
-            "WHISPER_MODEL_NAME",
-            self.DEFAULT_WHISPER_MODEL
-        )
-        self.whisper_device = os.getenv(
-            "WHISPER_DEVICE",
-            self.hardware_preferences["device"]
-        )
-        self.whisper_compute_type = os.getenv(
-            "WHISPER_COMPUTE_TYPE",
-            self.hardware_preferences["compute_type"]
-        )
-        self.whisper_transcribe_params = {
-            "beam_size": self._get_env_int(
-                "WHISPER_BEAM_SIZE",
-                self.DEFAULT_WHISPER_BEAM_SIZE
-            ),
-            "best_of": self._get_env_int(
-                "WHISPER_BEST_OF",
-                self.DEFAULT_WHISPER_BEST_OF
-            ),
-            "vad_filter": self._get_env_bool(
-                "WHISPER_VAD_FILTER",
-                self.DEFAULT_WHISPER_VAD_FILTER
-            )
-        }
-        print(
-            "Whisper config -> "
-            f"model={self.whisper_model_name}, "
-            f"device={self.whisper_device}, "
-            f"compute_type={self.whisper_compute_type}, "
-            f"beam_size={self.whisper_transcribe_params['beam_size']}, "
-            f"best_of={self.whisper_transcribe_params['best_of']}, "
-            f"vad_filter={self.whisper_transcribe_params['vad_filter']}",
-            flush=True
-        )
-        print(
-            f"Hardware detection: {self.hardware_preferences['description']} "
-            f"(env overrides applied: {'WHISPER_DEVICE' in os.environ or 'WHISPER_COMPUTE_TYPE' in os.environ})",
-            flush=True
-        )
-        
-        # Initialize models
-        print("Loading diarization pipeline...", flush=True)
-        try:
-            # Load pipeline with authentication token
-            self.diarization_pipeline = Pipeline.from_pretrained(
-                "pyannote/speaker-diarization-3.1",
-                use_auth_token=hf_token
-            )
-        except Exception as e:
-            print(f"Failed to load diarization pipeline: {e}")
-            print("\nTroubleshooting steps:")
-            print("1. Verify your HuggingFace token is valid")
-            print("2. Accept model terms at:")
-            print("   - https://huggingface.co/pyannote/segmentation-3.0")
-            print("   - https://huggingface.co/pyannote/speaker-diarization-3.1")
-            print("   - https://huggingface.co/pyannote/embedding")
-            raise
-        
-        self.diarization_pipeline.to(torch.device("cpu"))
-        print("Diarization pipeline loaded", flush=True)
-        
-        print("Loading Whisper model...", flush=True)
-        self.whisper = WhisperModel(
-            self.whisper_model_name,
-            device=self.whisper_device,
-            compute_type=self.whisper_compute_type,
-            cpu_threads=self.whisper_cpu_threads
-        )
-        print("Whisper model loaded", flush=True)
-
-    def _detect_hardware_preferences(self):
-        """Detect optimal Whisper device/compute type based on host hardware."""
-        hardware = {
-            "device": self.DEFAULT_WHISPER_DEVICE,
-            "compute_type": self.DEFAULT_WHISPER_COMPUTE_TYPE,
-            "description": "CPU (default configuration)"
-        }
-
-        try:
-            if torch.cuda.is_available():
-                gpu_name = torch.cuda.get_device_name(0)
-                capability = torch.cuda.get_device_capability(0)
-                hardware.update({
-                    "device": "cuda",
-                    "compute_type": "float16",
-                    "description": f"CUDA GPU detected: {gpu_name} (capability {capability[0]}.{capability[1]})"
-                })
-                return hardware
-        except Exception as cuda_error:
-            print(f"Warning: CUDA detection failed: {cuda_error}", flush=True)
-
-        mps_backend = getattr(torch.backends, "mps", None)
-        if mps_backend and mps_backend.is_available():
-            hardware.update({
-                "device": "cpu",
-                "compute_type": "int8_float16",
-                "description": "Apple Silicon (MPS) detected"
-            })
-            return hardware
-
-        system_name = platform.system()
-        machine_name = platform.machine().lower()
-        if system_name == "Darwin" and machine_name in ("arm64", "aarch64"):
-            hardware.update({
-                "device": "cpu",
-                "compute_type": "int8",
-                "description": "Apple Silicon CPU detected (MPS unavailable)"
-            })
-            return hardware
-
-        hardware["description"] = f"CPU fallback ({system_name} / {machine_name})"
-        return hardware
+            print("Transcription language: auto-detect", flush=True)
     
     def extract_start_time(self, filename: str) -> datetime:
         """Extract start time from filename format: YYYY-MM-DD_HH-MM-SS.ext"""
@@ -371,35 +173,40 @@ class AudioProcessor:
             else:
                 transcription_language = self.language  # Falls back to env var or None
             
+            # Convert language code if needed (ElevenLabs uses "eng" for English, etc.)
+            # Map common codes: "en" -> "eng", "es" -> "es", etc.
             if transcription_language:
+                language_map = {
+                    "en": "eng",
+                    "es": "es",
+                    "fr": "fr",
+                    "de": "de",
+                    "it": "it",
+                    "pt": "pt",
+                    "ru": "ru",
+                    "ja": "ja",
+                    "zh": "zh",
+                    "ar": "ar"
+                }
+                transcription_language = language_map.get(transcription_language.lower(), transcription_language.lower())
                 print(f"Transcription language: {transcription_language} (from {'job' if job.get('language') else 'recording' if recording.get('language') else 'environment'})", flush=True)
             else:
                 print("Transcription language: auto-detect", flush=True)
             
-            # Get speaker count parameters from job, recording, or None
-            # Priority: job > recording > None (auto-detect)
-            min_speakers = None
+            # Get maxSpeakers from job or recording (for num_speakers API parameter)
+            # Priority: job.maxSpeakers > recording.maxSpeakers
             max_speakers = None
-            
-            if job.get('minSpeakers') is not None:
-                min_speakers = job['minSpeakers']
-            elif recording.get('minSpeakers') is not None:
-                min_speakers = recording['minSpeakers']
-            
             if job.get('maxSpeakers') is not None:
                 max_speakers = job['maxSpeakers']
             elif recording.get('maxSpeakers') is not None:
                 max_speakers = recording['maxSpeakers']
             
-            if min_speakers is not None or max_speakers is not None:
-                speaker_info = []
-                if min_speakers is not None:
-                    speaker_info.append(f"min_speakers={min_speakers}")
-                if max_speakers is not None:
-                    speaker_info.append(f"max_speakers={max_speakers}")
-                print(f"Diarization speaker constraints: {', '.join(speaker_info)}", flush=True)
+            if max_speakers is not None:
+                # Ensure it's within valid range (1-32 per API spec)
+                max_speakers = max(1, min(32, int(max_speakers)))
+                print(f"Speaker count hint: max {max_speakers} speakers", flush=True)
             else:
-                print("Diarization speaker count: auto-detect", flush=True)
+                print("Speaker count: auto-detect", flush=True)
             
             # Update status
             self.update_job_progress(job_id, 0, "running", recording_id)
@@ -408,74 +215,79 @@ class AudioProcessor:
                 {"$set": {"startedAt": datetime.utcnow()}}
             )
             
-            # Step 1: Diarization (0-30%)
+            # Step 1: Diarization & Transcription (0-70%)
+            # ElevenLabs API handles both diarization and transcription in one call
             print("=" * 60, flush=True)
-            print("STEP 1: Starting diarization...", flush=True)
+            print("STEP 1: Starting diarization and transcription with ElevenLabs...", flush=True)
             print(f"Audio file: {recording['filePath']}", flush=True)
             self.update_job_step(job_id, "diarization", "running", 0)
-            self.update_job_progress(job_id, 5, "running", recording_id)  # Show initial progress
+            self.update_job_progress(job_id, 5, "running", recording_id)
             
-            print("Running diarization pipeline (this may take a while)...", flush=True)
-            # Suppress stderr output from soundfile/librosa during pipeline execution
-            stderr_buffer = StringIO()
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                with redirect_stderr(stderr_buffer):
-                    # Build diarization parameters
-                    diarization_params = {}
-                    if min_speakers is not None:
-                        diarization_params['min_speakers'] = min_speakers
-                    if max_speakers is not None:
-                        diarization_params['max_speakers'] = max_speakers
-                    
-                    # Call diarization pipeline with parameters
-                    if diarization_params:
-                        diarization = self.diarization_pipeline(recording['filePath'], **diarization_params)
-                    else:
-                        diarization = self.diarization_pipeline(recording['filePath'])
+            # Read audio file
+            print("Reading audio file...", flush=True)
+            with open(recording['filePath'], 'rb') as f:
+                audio_bytes = f.read()
             
-            # Count segments
-            segment_list = list(diarization.itertracks())
-            num_segments = len(segment_list)
-            print(f"✓ Diarization completed! Found {num_segments} speaker segments", flush=True)
-            self.update_job_step(job_id, "diarization", "completed", 100)
-            self.update_job_progress(job_id, 30, "running", recording_id)
+            audio_data = BytesIO(audio_bytes)
+            # Reset position to start (important for BytesIO)
+            audio_data.seek(0)
             
-            # Step 2: Identification (30-50%)
-            print("=" * 60, flush=True)
-            print("STEP 2: Identifying speakers and creating segments...", flush=True)
-            self.update_job_step(job_id, "identification", "running", 0)
-            segments = self.identify_speakers(
-                recording, 
-                diarization,
+            # Call ElevenLabs API
+            print("Calling ElevenLabs Speech-to-Text API (this may take a while)...", flush=True)
+            self.update_job_progress(job_id, 10, "running", recording_id)
+            
+            # Build transcription parameters according to ElevenLabs API spec:
+            # https://elevenlabs.io/docs/api-reference/speech-to-text/convert
+            transcription_params = {
+                "file": audio_data,
+                "model_id": "scribe_v2",  # Required: scribe_v1 or scribe_v2
+                "tag_audio_events": True,  # Tag audio events like (laughter), (footsteps), etc.
+                "diarize": True,  # Enable speaker diarization
+                "timestamps_granularity": "word",  # word-level timestamps (default, but explicit)
+            }
+            
+            # Optional: language code (ISO-639-1 or ISO-639-3)
+            if transcription_language:
+                transcription_params["language_code"] = transcription_language
+            
+            # Optional: num_speakers - The maximum amount of speakers (1-32)
+            # Can help with diarization accuracy when known
+            if max_speakers is not None:
+                transcription_params["num_speakers"] = max_speakers
+            
+            transcription_result = self.elevenlabs.speech_to_text.convert(**transcription_params)
+            
+            print("✓ ElevenLabs API call completed", flush=True)
+            self.update_job_progress(job_id, 40, "running", recording_id)
+            
+            # Parse transcription result
+            print("Parsing transcription results...", flush=True)
+            segments = self.parse_elevenlabs_transcription(
+                transcription_result,
+                recording,
                 recording_start
             )
+            
+            print(f"✓ Parsed {len(segments)} speaker segments", flush=True)
+            self.update_job_step(job_id, "diarization", "completed", 100)
+            self.update_job_step(job_id, "transcription", "completed", 100)
+            self.update_job_progress(job_id, 70, "running", recording_id)
+            
+            # Step 2: Identification (70-75%)
+            print("=" * 60, flush=True)
+            print("STEP 2: Creating segment documents...", flush=True)
+            self.update_job_step(job_id, "identification", "running", 0)
+            # Segments are already created in parse_elevenlabs_transcription
             print(f"✓ Created {len(segments)} segment documents in database", flush=True)
             self.update_job_step(job_id, "identification", "completed", 100)
-            self.update_job_progress(job_id, 50, "running", recording_id)
+            self.update_job_progress(job_id, 75, "running", recording_id)
             
-            # Step 3: Extract segments (50-60%)
+            # Step 3: Extract segments (75-100%)
             print("=" * 60, flush=True)
             print("STEP 3: Extracting audio segments...", flush=True)
             self.extract_audio_segments(recording, segments)
             print(f"✓ Extracted {len(segments)} audio segment files", flush=True)
-            self.update_job_progress(job_id, 60, "running", recording_id)
-            
-            # Step 4: Transcription (60-100%)
-            print("=" * 60, flush=True)
-            print(f"STEP 4: Transcribing {len(segments)} segments...", flush=True)
-            self.update_job_step(job_id, "transcription", "running", 0)
-            self.transcribe_segments(
-                recording, 
-                segments, 
-                job_id, 
-                start_progress=60, 
-                end_progress=100,
-                recording_id=recording_id,
-                language=transcription_language
-            )
-            print("✓ Transcription completed for all segments", flush=True)
-            self.update_job_step(job_id, "transcription", "completed", 100)
+            self.update_job_progress(job_id, 100, "running", recording_id)
             
             # Update final status
             self.update_job_progress(job_id, 100, "completed", recording_id)
@@ -524,106 +336,244 @@ class AudioProcessor:
                 )
             raise
     
-    def transcribe_segments(
-        self, 
-        recording, 
-        segments, 
-        job_id, 
-        start_progress=60, 
-        end_progress=100,
-        recording_id=None,
-        language=None
-    ):
-        """Transcribe all segments with progress updates
-        
-        Args:
-            language: Language code to use for transcription. If None, uses self.language (from env var) or auto-detects.
+    def parse_elevenlabs_transcription(self, transcription_result, recording, recording_start):
         """
-        total_segments = len(segments)
-        if total_segments == 0:
-            return
+        Parse ElevenLabs transcription result and create segment documents.
         
-        # Use provided language, or fall back to instance language (from env var)
-        transcription_language = language if language is not None else self.language
+        According to ElevenLabs API spec, the response can be:
+        1. Single-channel: SpeechToTextChunkResponseModel with words directly
+        2. Multi-channel: MultichannelSpeechToTextResponseModel with transcripts array
         
-        progress_range = end_progress - start_progress
-        
-        for idx, segment in enumerate(segments):
-            if (idx + 1) % 10 == 0 or idx == 0:
-                print(f"  Transcribing segment {idx + 1}/{total_segments}...", flush=True)
-            try:
-                # Transcribe segment
-                transcribe_params = dict(self.whisper_transcribe_params)
-                # Add language parameter if specified (locks transcription to specific language)
-                if transcription_language:
-                    transcribe_params["language"] = transcription_language
-                
-                result, info = self.whisper.transcribe(
-                    segment['segmentAudioPath'],
-                    **transcribe_params
-                )
-                
-                # Collect transcription
-                transcription_segments = []
-                full_text = []
-                
-                for seg in result:
-                    transcription_segments.append({
-                        "startOffset": seg.start,
-                        "endOffset": seg.end,
-                        "text": seg.text.strip(),
-                        "confidence": getattr(seg, 'probability', 0.0) if hasattr(seg, 'probability') else 0.0
-                    })
-                    full_text.append(seg.text.strip())
-                
-                # Update segment in MongoDB
-                self.db.speakerSegments.update_one(
-                    {"_id": segment['_id']},
-                    {
-                        "$set": {
-                            "transcription": " ".join(full_text),
-                            "transcriptionSegments": transcription_segments
-                        }
-                    }
-                )
-                
-                # Update progress
-                current_progress = start_progress + int(
-                    (idx + 1) / total_segments * progress_range
-                )
-                self.update_job_progress(job_id, current_progress, "running", recording_id)
-            except Exception as e:
-                print(f"Error transcribing segment {segment['_id']}: {str(e)}")
-                continue
-    
-    def identify_speakers(self, recording, diarization, recording_start):
-        """Identify speakers and create segment documents"""
+        Each word has: text, start, end, type, speaker_id, logprob, characters
+        """
         segments = []
         
-        for turn, _, speaker_label in diarization.itertracks(yield_label=True):
-            # Calculate absolute timestamps
-            start_time = recording_start + timedelta(seconds=turn.start)
-            end_time = recording_start + timedelta(seconds=turn.end)
+        # Handle multi-channel response (has 'transcripts' array)
+        transcripts = []
+        if hasattr(transcription_result, 'transcripts'):
+            transcripts = transcription_result.transcripts
+        elif isinstance(transcription_result, dict) and 'transcripts' in transcription_result:
+            transcripts = transcription_result['transcripts']
+        
+        if transcripts:
+            # Multi-channel audio: process each channel's transcript
+            print(f"Multi-channel audio detected: {len(transcripts)} channels", flush=True)
+            for idx, transcript in enumerate(transcripts):
+                print(f"Processing channel {idx}...", flush=True)
+                words = self._extract_words_from_transcript(transcript)
+                if words:
+                    channel_segments = self._create_segments_from_words(
+                        words, recording, recording_start
+                    )
+                    segments.extend(channel_segments)
+        else:
+            # Single-channel: extract words directly from response
+            words = self._extract_words_from_transcript(transcription_result)
             
-            segment = {
-                "recordingId": recording['_id'],
-                "speakerLabel": speaker_label,
-                "startTime": start_time,
-                "endTime": end_time,
-                "durationSeconds": turn.end - turn.start,
-                "confidenceScore": 0.0,  # Will be updated during identification
-                "segmentAudioPath": "",  # Will be set after extraction
-                "transcription": "",
-                "transcriptionSegments": [],
-                "createdAt": datetime.utcnow()
-            }
+            if not words:
+                print("Warning: No words found in transcription result. Response structure:", flush=True)
+                print(f"Type: {type(transcription_result)}", flush=True)
+                if hasattr(transcription_result, '__dict__'):
+                    print(f"Attributes: {transcription_result.__dict__.keys()}", flush=True)
+                elif isinstance(transcription_result, dict):
+                    print(f"Keys: {transcription_result.keys()}", flush=True)
+                return segments
             
-            # Insert into MongoDB
-            result = self.db.speakerSegments.insert_one(segment)
-            segment['_id'] = result.inserted_id
-            segments.append(segment)
+            segments = self._create_segments_from_words(words, recording, recording_start)
         
         return segments
+    
+    def _extract_words_from_transcript(self, transcript):
+        """Extract words array from a transcript object (handles both dict and object formats)"""
+        words = []
+        
+        if hasattr(transcript, 'words'):
+            words = transcript.words
+        elif isinstance(transcript, dict) and 'words' in transcript:
+            words = transcript['words']
+        else:
+            # Try to access as attribute or dict key
+            try:
+                if hasattr(transcript, '__dict__'):
+                    words = getattr(transcript, 'words', [])
+                elif isinstance(transcript, dict):
+                    words = transcript.get('words', [])
+            except:
+                pass
+        
+        return words
+    
+    def _create_segments_from_words(self, words, recording, recording_start):
+        """Create segment documents from words array"""
+        segments = []
+        
+        # Group words by speaker and create segments
+        # Group consecutive words from the same speaker into segments
+        current_speaker = None
+        current_words = []
+        current_start = None
+        current_logprobs = []  # Track logprobs for confidence calculation
+        
+        for word in words:
+            # Extract word data (handle both dict and object formats)
+            # According to API spec: text, start, end, type, speaker_id, logprob, characters
+            if isinstance(word, dict):
+                speaker_id = word.get('speaker_id') or word.get('speaker')
+                start = word.get('start')
+                end = word.get('end')
+                text = word.get('text') or word.get('word', '')
+                word_type = word.get('type', 'word')  # 'word', 'spacing', or 'audio_event'
+                logprob = word.get('logprob')  # Log probability (confidence)
+            else:
+                speaker_id = getattr(word, 'speaker_id', None) or getattr(word, 'speaker', None)
+                start = getattr(word, 'start', None)
+                end = getattr(word, 'end', None)
+                text = getattr(word, 'text', None) or getattr(word, 'word', '')
+                word_type = getattr(word, 'type', 'word')
+                logprob = getattr(word, 'logprob', None)
+            
+            # Skip if missing required data
+            if speaker_id is None or start is None:
+                continue
+            
+            # Skip spacing-only words (they don't contribute to text)
+            if word_type == 'spacing':
+                continue
+            
+            # If speaker changed or gap is too large (>2 seconds), create a new segment
+            if (current_speaker != speaker_id or 
+                (current_start is not None and start - current_start > 2.0)):
+                
+                # Save previous segment if exists
+                if current_speaker is not None and current_words:
+                    segment_text = ' '.join([
+                        w.get('text', '') if isinstance(w, dict) 
+                        else getattr(w, 'text', '') or getattr(w, 'word', '') 
+                        for w in current_words
+                    ])
+                    if segment_text.strip():
+                        last_word = current_words[-1]
+                        last_end = last_word.get('end') if isinstance(last_word, dict) else getattr(last_word, 'end', None)
+                        segment_end = last_end if last_end else current_start + 1.0
+                        
+                        # Calculate average confidence from logprobs
+                        # logprob is in range [-infinity, 0], higher (closer to 0) = more confident
+                        avg_logprob = None
+                        if current_logprobs:
+                            # Filter out None values
+                            valid_logprobs = [lp for lp in current_logprobs if lp is not None]
+                            if valid_logprobs:
+                                avg_logprob = sum(valid_logprobs) / len(valid_logprobs)
+                        
+                        segment = self._create_segment_document(
+                            recording,
+                            current_speaker,
+                            recording_start,
+                            current_start,
+                            segment_end,
+                            segment_text,
+                            avg_logprob
+                        )
+                        segments.append(segment)
+                
+                # Start new segment
+                current_speaker = speaker_id
+                current_start = start
+                current_words = [word]
+                current_logprobs = [logprob] if logprob is not None else []
+            else:
+                # Continue current segment
+                current_words.append(word)
+                if logprob is not None:
+                    current_logprobs.append(logprob)
+        
+        # Save final segment
+        if current_speaker is not None and current_words:
+            segment_text = ' '.join([
+                w.get('text', '') if isinstance(w, dict) 
+                else getattr(w, 'text', '') or getattr(w, 'word', '') 
+                for w in current_words
+            ])
+            if segment_text.strip():
+                last_word = current_words[-1]
+                last_end = last_word.get('end') if isinstance(last_word, dict) else getattr(last_word, 'end', None)
+                segment_end = last_end if last_end else (current_start + 1.0 if current_start else 0)
+                
+                # Calculate average confidence from logprobs
+                avg_logprob = None
+                if current_logprobs:
+                    valid_logprobs = [lp for lp in current_logprobs if lp is not None]
+                    if valid_logprobs:
+                        avg_logprob = sum(valid_logprobs) / len(valid_logprobs)
+                
+                segment = self._create_segment_document(
+                    recording,
+                    current_speaker,
+                    recording_start,
+                    current_start,
+                    segment_end,
+                    segment_text,
+                    avg_logprob
+                )
+                segments.append(segment)
+        
+        return segments
+    
+    
+    def _create_segment_document(self, recording, speaker_label, recording_start, start_seconds, end_seconds, text, avg_logprob=None):
+        """
+        Create a segment document and insert into MongoDB.
+        
+        Args:
+            avg_logprob: Average log probability from ElevenLabs API.
+                        logprob is in range [-infinity, 0], higher (closer to 0) = more confident.
+                        Convert to confidence score: confidence = exp(logprob) or normalize to 0-1 range.
+        """
+        start_time = recording_start + timedelta(seconds=start_seconds)
+        end_time = recording_start + timedelta(seconds=end_seconds)
+        
+        # Convert logprob to confidence score (0-1 range)
+        # logprob range: [-infinity, 0], where 0 = highest confidence
+        # We'll normalize: confidence = (logprob + 10) / 10, clamped to [0, 1]
+        # This assumes logprobs are typically in range [-10, 0]
+        if avg_logprob is not None:
+            # Normalize logprob to 0-1 range
+            # Typical logprobs are between -10 and 0, so we'll use that range
+            confidence_score = max(0.0, min(1.0, (avg_logprob + 10) / 10))
+            transcription_confidence = confidence_score
+        else:
+            # Default confidence if logprob not available
+            confidence_score = 0.0
+            transcription_confidence = 0.95
+        
+        # Create a single transcription segment for the entire text
+        # (ElevenLabs provides word-level timing, but we group by speaker segments)
+        duration = end_seconds - start_seconds
+        transcription_segments = [{
+            "startOffset": 0.0,
+            "endOffset": duration,
+            "text": text,
+            "confidence": transcription_confidence
+        }]
+        
+        segment = {
+            "recordingId": recording['_id'],
+            "speakerLabel": str(speaker_label),
+            "startTime": start_time,
+            "endTime": end_time,
+            "durationSeconds": end_seconds - start_seconds,
+            "confidenceScore": confidence_score,
+            "segmentAudioPath": "",  # Will be set after extraction
+            "transcription": text,
+            "transcriptionSegments": transcription_segments,
+            "createdAt": datetime.utcnow()
+        }
+        
+        # Insert into MongoDB
+        result = self.db.speakerSegments.insert_one(segment)
+        segment['_id'] = result.inserted_id
+        
+        return segment
     
     def extract_audio_segments(self, recording, segments):
         """Extract audio files for each segment"""
@@ -680,4 +630,3 @@ class AudioProcessor:
             except Exception as e:
                 print(f"Error extracting segment {segment['_id']}: {str(e)}")
                 continue
-

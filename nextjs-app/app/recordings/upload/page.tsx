@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-// Common language codes for Whisper
+// Common language codes for ElevenLabs Speech-to-Text
 const LANGUAGES = [
   { code: '', label: 'Auto-detect (default)' },
   { code: 'en', label: 'English' },
@@ -246,7 +246,7 @@ export default function UploadPage() {
             ))}
           </select>
           <p className="mt-2 text-xs text-gray-500">
-            Select a language to lock transcription to that language, or leave as &quot;Auto-detect&quot; to let Whisper automatically detect the language.
+            Select a language to lock transcription to that language, or leave as &quot;Auto-detect&quot; to let ElevenLabs automatically detect the language.
           </p>
         </div>
 

@@ -194,7 +194,7 @@ log_info "Next steps:"
 echo "  1. If you were added to the docker group, log out and log back in"
 echo "     (or run: newgrp docker)"
 echo "  2. Clone or copy your speaker diarization project"
-echo "  3. Create .env file with your HUGGINGFACE_TOKEN"
+echo "  3. Create .env file with your ELEVENLABS_API_KEY"
 echo "  4. Run: docker-compose build && docker-compose up -d"
 echo
 log_info "For detailed instructions, see QUICKSTART.md"

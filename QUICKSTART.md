@@ -94,7 +94,6 @@ If UFW is enabled, allow necessary ports:
 ```bash
 sudo ufw allow 3001/tcp  # Next.js web UI
 sudo ufw allow 27017/tcp # MongoDB (if accessing externally)
-sudo ufw allow 8081/tcp  # Mongo Express (if accessing externally)
 ```
 
 ### 7. Install Git (if not already installed)
@@ -106,18 +105,16 @@ sudo apt install -y git
 ## Prerequisites
 
 1. **Docker and Docker Compose** installed (see Ubuntu 24.04 VM Preparation above)
-2. **HuggingFace Account** with access token
+2. **ElevenLabs Account** with API key
 
 ## Setup Steps
 
-### 1. Get HuggingFace Token
+### 1. Get ElevenLabs API Key
 
-1. Create account at https://huggingface.co
-2. Go to Settings → Access Tokens
-3. Create a new token
-4. Accept model terms:
-   - https://huggingface.co/pyannote/speaker-diarization-3.1
-   - https://huggingface.co/pyannote/embedding
+1. Create account at https://elevenlabs.io
+2. Go to Settings → API Keys
+3. Create a new API key
+4. Copy the API key (you'll need it for the `.env` file)
 
 ### 2. Configure Environment
 
@@ -125,23 +122,29 @@ sudo apt install -y git
 cp .env.example .env
 ```
 
-Edit `.env` and add your HuggingFace token:
+Edit `.env` and add your ElevenLabs API key:
 ```
-HUGGINGFACE_TOKEN=your_token_here
-```
-
-Optional performance overrides (add as needed):
-```
-AUDIO_PROCESSOR_CPU_THREADS=8
-WHISPER_CPU_THREADS=8
-WHISPER_MODEL_NAME=base
-WHISPER_COMPUTE_TYPE=int8
-WHISPER_BEAM_SIZE=1
-WHISPER_BEST_OF=1
-WHISPER_VAD_FILTER=true
+ELEVENLABS_API_KEY=your_api_key_here
 ```
 
-See `README.md` for the full list and guidance on choosing values for your hardware.
+Optional language override (add as needed):
+```
+ELEVENLABS_LANGUAGE=eng  # English (leave empty for auto-detect)
+```
+
+**Common language codes:**
+- `eng` - English
+- `es` - Spanish
+- `fr` - French
+- `de` - German
+- `it` - Italian
+- `pt` - Portuguese
+- `ru` - Russian
+- `ja` - Japanese
+- `zh` - Chinese
+- `ar` - Arabic
+
+See `README.md` for more details on language configuration.
 
 ### 3. Build and Start
 
@@ -160,7 +163,6 @@ docker-compose logs -f
 
 - **Web UI**: http://localhost:3001
 - **MongoDB**: mongodb://localhost:27017
-- **Mongo Express** (optional): http://localhost:8081
 
 ## First Upload
 
@@ -168,7 +170,7 @@ docker-compose logs -f
 2. Click "Upload Recording"
 3. Upload an audio file with filename format: `YYYY-MM-DD_HH-MM-SS.ext`
    - Example: `2025-11-10_14-33-23.mp3`
-4. Wait for processing to complete
+4. Wait for processing to complete (processing is done via ElevenLabs API)
 5. View results in the recordings list
 
 ## Troubleshooting
@@ -181,9 +183,10 @@ docker-compose logs -f worker
 ```
 
 Common issues:
-- Missing or invalid HuggingFace token
+- Missing or invalid ElevenLabs API key
 - Insufficient disk space
-- Model download in progress (first run takes longer)
+- Network connectivity issues (API calls require internet)
+- API quota/rate limits exceeded
 
 ### MongoDB connection issues
 
@@ -205,6 +208,14 @@ docker-compose build nextjs
 docker-compose up -d nextjs
 ```
 
+### API Errors
+
+If you see ElevenLabs API errors:
+- Verify your API key is correct
+- Check your ElevenLabs account quota/limits
+- Ensure internet connectivity is available
+- Review API error messages in worker logs
+
 ## Stopping Services
 
 ```bash
@@ -215,4 +226,3 @@ To also remove volumes (deletes all data):
 ```bash
 docker-compose down -v
 ```
-

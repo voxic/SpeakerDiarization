@@ -1,13 +1,13 @@
 # Speaker Diarization & Transcription System
 
-A self-hosted speaker diarization and transcription system that processes multi-speaker audio recordings, separates speakers, identifies them against known voice profiles, and transcribes speech.
+A cloud-powered speaker diarization and transcription system that processes multi-speaker audio recordings, separates speakers, and transcribes speech using ElevenLabs Speech-to-Text API.
 
 ## Features
 
 - Multi-speaker audio file upload and processing
 - Real-time progress tracking
-- Speaker diarization and identification
-- Speech-to-text transcription with timestamps
+- Speaker diarization and identification (via ElevenLabs)
+- Speech-to-text transcription with timestamps (via ElevenLabs)
 - Web UI for playback and speaker tagging
 - Automatic timestamp extraction from filenames (format: `YYYY-MM-DD_HH-MM-SS.ext`)
 - Audio segment playback by speaker
@@ -99,28 +99,25 @@ sudo apt install -y git
 ## Prerequisites
 
 - Docker and Docker Compose (see Ubuntu 24.04 VM Preparation above)
-- HuggingFace account with access token (for pyannote.audio models)
-- At least 4 CPU cores and 8GB RAM (recommended: 8 cores, 16GB RAM)
+- ElevenLabs account with API key (for Speech-to-Text API)
+- At least 2 CPU cores and 2GB RAM (reduced requirements since processing is done in the cloud)
 
 ## Quick Start
 
 1. **Clone and configure:**
    ```bash
    cp .env.example .env
-   # Edit .env and add your HUGGINGFACE_TOKEN
-   # Optionally set WHISPER_LANGUAGE to lock transcription to a specific language
-   # Examples: "en" (English), "es" (Spanish), "fr" (French), "de" (German), etc.
+   # Edit .env and add your ELEVENLABS_API_KEY
+   # Optionally set ELEVENLABS_LANGUAGE to lock transcription to a specific language
+   # Examples: "eng" (English), "es" (Spanish), "fr" (French), "de" (German), etc.
    # Leave unset for auto-detection (default)
    ```
 
-2. **Get HuggingFace Token:**
-   - Create account at https://huggingface.co
-   - Go to Settings → Access Tokens
-   - Create a new token
-   - Accept model terms:
-     - https://huggingface.co/pyannote/speaker-diarization-3.1
-     - https://huggingface.co/pyannote/embedding
-   - Add token to `.env` file
+2. **Get ElevenLabs API Key:**
+   - Create account at https://elevenlabs.io
+   - Go to Settings → API Keys
+   - Create a new API key
+   - Add the key to your `.env` file as `ELEVENLABS_API_KEY`
 
 3. **Build and start:**
    ```bash
@@ -131,7 +128,6 @@ sudo apt install -y git
 4. **Access the application:**
    - Web UI: http://localhost:3001
    - MongoDB: mongodb://localhost:27017
-   - Mongo Express (optional): http://localhost:8081
 
 ## Project Structure
 
@@ -143,7 +139,7 @@ speaker-diarization-system/
 ├── README.md
 ├── mongo-init.js
 ├── nextjs-app/          # Next.js frontend/backend
-└── python-worker/       # Audio processing worker
+└── python-worker/       # Audio processing worker (uses ElevenLabs API)
 ```
 
 ## Usage
@@ -151,10 +147,11 @@ speaker-diarization-system/
 1. **Upload audio files:**
    - Use filename format: `YYYY-MM-DD_HH-MM-SS.ext` (e.g., `2025-11-10_14-33-23.mp3`)
    - Upload via web UI or API
+   - Supported formats: MP3, WAV, M4A, FLAC, OGG
 
 2. **Monitor processing:**
    - View real-time progress in the dashboard
-   - Processing time: ~50-75 seconds per minute of audio (base model)
+   - Processing time depends on ElevenLabs API response time (typically faster than local processing)
 
 3. **Review results:**
    - View transcriptions with speaker labels
@@ -167,27 +164,28 @@ See the design document for complete API specifications.
 
 ## Performance
 
-- **Processing Speed:** ~50-75 seconds per minute of audio (base Whisper model)
-- **CPU Requirements:** 4+ cores recommended
-- **Memory:** 8GB+ recommended per worker
+- **Processing Speed:** Depends on ElevenLabs API (typically faster than local processing)
+- **CPU Requirements:** Minimal (2+ cores) since processing is done in the cloud
+- **Memory:** 2GB+ recommended (reduced from 8GB since no local models are loaded)
+- **Network:** Requires internet connection for API calls
 
 ## Configuration
 
 ### Language Locking
 
-By default, Whisper auto-detects the language in your audio. To lock transcription to a specific language, set the `WHISPER_LANGUAGE` environment variable:
+By default, ElevenLabs auto-detects the language in your audio. To lock transcription to a specific language, set the `ELEVENLABS_LANGUAGE` environment variable:
 
 ```bash
 # In your .env file or docker-compose.yml
-WHISPER_LANGUAGE=en  # English
-WHISPER_LANGUAGE=es  # Spanish
-WHISPER_LANGUAGE=fr  # French
-WHISPER_LANGUAGE=de  # German
-# ... etc (see Whisper supported languages)
+ELEVENLABS_LANGUAGE=eng  # English
+ELEVENLABS_LANGUAGE=es   # Spanish
+ELEVENLABS_LANGUAGE=fr   # French
+ELEVENLABS_LANGUAGE=de   # German
+# ... etc (see ElevenLabs supported languages)
 ```
 
 **Common language codes:**
-- `en` - English
+- `eng` - English
 - `es` - Spanish
 - `fr` - French
 - `de` - German
@@ -198,31 +196,29 @@ WHISPER_LANGUAGE=de  # German
 - `zh` - Chinese
 - `ar` - Arabic
 
-If `WHISPER_LANGUAGE` is not set, Whisper will auto-detect the language (default behavior).
+If `ELEVENLABS_LANGUAGE` is not set, ElevenLabs will auto-detect the language (default behavior).
 
-### Performance Tuning
-
-You can control CPU usage and Whisper behavior through environment variables:
-
-- `AUDIO_PROCESSOR_CPU_THREADS`: threads used by PyTorch/pyannote (default 4)
-- `WHISPER_CPU_THREADS`: threads dedicated to Whisper (defaults to `AUDIO_PROCESSOR_CPU_THREADS`)
-- `WHISPER_MODEL_NAME`: Whisper model size (`tiny`, `base`, `small`, `medium`, etc.; default `base`)
-- `WHISPER_DEVICE`: device Whisper runs on (`cpu`, `cuda`, etc.; default `cpu`)
-- `WHISPER_COMPUTE_TYPE`: compute precision (e.g., `int8`, `int16`, `float16`; default `int8`)
-- `WHISPER_BEAM_SIZE`: beam search width (default 1)
-- `WHISPER_BEST_OF`: number of candidates to sample before filtering (default 1)
-- `WHISPER_VAD_FILTER`: enable VAD pre-filtering (`true`/`false`; default `true`)
-
-Update these in `.env` or your deployment environment to match your hardware. Larger models and higher beam sizes improve accuracy at the cost of speed/CPU.
+**Note:** The system also accepts common language codes like `en`, `es`, etc., which are automatically converted to ElevenLabs format (`en` → `eng`).
 
 ## Troubleshooting
 
 - Check logs: `docker-compose logs -f worker`
-- Verify HuggingFace token is set correctly
+- Verify ElevenLabs API key is set correctly in `.env`
 - Ensure sufficient disk space for audio files
 - Check MongoDB connection: `docker-compose exec mongo mongosh speaker_db`
+- Verify internet connectivity (required for ElevenLabs API calls)
+- Check ElevenLabs API quota/limits if processing fails
+
+## Migration from Local Processing
+
+If you were previously using local Whisper and pyannote.audio models:
+
+- The system now uses ElevenLabs Speech-to-Text API for both diarization and transcription
+- No need for HuggingFace tokens or local model downloads
+- Reduced resource requirements (2GB RAM vs 8GB+)
+- Faster processing times (cloud-based)
+- Requires internet connection and ElevenLabs API key
 
 ## License
 
 See LICENSE file for details.
-

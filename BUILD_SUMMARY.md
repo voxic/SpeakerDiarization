@@ -24,13 +24,13 @@ speaker-diarization-system/
 │   │   ├── page.tsx           # Home page
 │   │   ├── globals.css        # Global styles
 │   │   ├── dashboard/         # Dashboard page
-│   │   ├── recordings/       # Recording pages
+│   │   ├── recordings/        # Recording pages
 │   │   ├── speakers/          # Speaker management
 │   │   └── api/               # API routes
 │   │       ├── recordings/   # Recording endpoints
 │   │       ├── speakers/      # Speaker endpoints
-│   │       ├── segments/      # Segment endpoints
-│   │       └── jobs/          # Job endpoints
+│   │       ├── segments/     # Segment endpoints
+│   │       └── jobs/         # Job endpoints
 │   ├── lib/
 │   │   ├── mongodb.ts        # MongoDB connection
 │   │   ├── storage.ts        # File storage utilities
@@ -42,7 +42,7 @@ speaker-diarization-system/
     ├── Dockerfile
     ├── requirements.txt
     ├── worker.py             # Worker main loop
-    └── processor.py          # Audio processing logic
+    └── processor.py          # Audio processing logic (uses ElevenLabs API)
 ```
 
 ## Components Built
@@ -83,22 +83,21 @@ speaker-diarization-system/
 **Components:**
 - `worker.py` - Main worker loop that polls MongoDB for jobs
 - `processor.py` - Audio processing pipeline:
-  - Speaker diarization (pyannote.audio)
-  - Speaker identification
+  - Speaker diarization and transcription (ElevenLabs Speech-to-Text API)
   - Audio segment extraction
-  - Speech-to-text transcription (faster-whisper)
+  - Progress reporting
 
 **Processing Pipeline:**
-1. Diarization (0-30%) - Detect who spoke when
-2. Identification (30-50%) - Match against known speakers
-3. Segment extraction (50-60%) - Extract audio segments
-4. Transcription (60-100%) - Transcribe each segment
+1. Diarization & Transcription (0-70%) - ElevenLabs API handles both in one call
+2. Identification (70-75%) - Create segment documents
+3. Segment extraction (75-100%) - Extract audio segments for playback
 
-**Optimizations:**
-- CPU-optimized (INT8 quantization)
-- Multi-threaded processing
+**Features:**
+- Cloud-based processing via ElevenLabs API
+- Minimal resource requirements (2GB RAM, 2 CPUs)
 - Progress reporting to MongoDB
 - Error handling and recovery
+- Internet connectivity required for API calls
 
 ### 3. MongoDB Database
 
@@ -121,42 +120,37 @@ speaker-diarization-system/
 - `nextjs` - Next.js application (port 3001)
 - `worker` - Python worker service
 - `mongo` - MongoDB database (port 27017)
-- `mongo-express` - Database UI (port 8081, optional)
 
 **Volumes:**
 - `mongo-data` - Database persistence
 - `audio-storage` - Audio files storage
-- `models-cache` - ML model cache
 
 ## Key Features Implemented
 
 ✅ Multi-speaker audio file upload
 ✅ Automatic timestamp extraction from filename
 ✅ Real-time progress tracking via SSE
-✅ Speaker diarization and identification
-✅ Speech-to-text transcription with timestamps
+✅ Speaker diarization and identification (via ElevenLabs)
+✅ Speech-to-text transcription with timestamps (via ElevenLabs)
 ✅ Web UI for playback and speaker tagging
 ✅ Audio segment playback by speaker
 ✅ Multiple export formats (JSON, TXT, SRT, VTT)
 ✅ Docker-based deployment
-✅ CPU-optimized processing (no GPU required)
+✅ Cloud-based processing (no local ML models required)
 
 ## Technology Stack
 
 - **Frontend/Backend:** Next.js 14 (React, TypeScript)
 - **Database:** MongoDB 7
-- **ML Models:** 
-  - pyannote.audio (speaker diarization)
-  - faster-whisper (speech-to-text)
-- **Processing:** CPU-optimized with INT8 quantization
+- **Speech Processing:** ElevenLabs Speech-to-Text API
 - **Deployment:** Docker & Docker Compose
 
 ## Next Steps
 
 1. **First Run:**
-   - Set up `.env` file with HuggingFace token
+   - Set up `.env` file with ElevenLabs API key
    - Build and start services: `docker-compose up -d`
-   - First run will download ML models (may take 10-20 minutes)
+   - Processing is done via cloud API (no model downloads)
 
 2. **Testing:**
    - Upload a test audio file with proper filename format
@@ -164,29 +158,28 @@ speaker-diarization-system/
    - Review transcription results
 
 3. **Customization:**
-   - Adjust Whisper model size in `python-worker/processor.py`
-   - Modify CPU thread count in `docker-compose.yml`
+   - Adjust language settings in `.env` file
+   - Modify resource limits in `docker-compose.yml` if needed
    - Customize UI styling in `nextjs-app/app/globals.css`
 
 ## Performance Notes
 
-- **Processing Speed:** ~50-75 seconds per minute of audio (base model)
-- **First Run:** Model downloads add 10-20 minutes
-- **CPU Requirements:** 4+ cores recommended
-- **Memory:** 8GB+ recommended per worker
+- **Processing Speed:** Depends on ElevenLabs API response time (typically faster than local processing)
+- **Resource Requirements:** Minimal (2GB RAM, 2 CPUs)
 - **Storage:** ~60MB per hour of audio (MP3)
+- **Network:** Requires internet connectivity for API calls
+- **API Costs:** Subject to ElevenLabs pricing/quotas
 
 ## Known Limitations
 
+- Requires internet connectivity for processing
+- Subject to ElevenLabs API quotas and rate limits
 - Speaker identification requires known speaker profiles (not fully implemented)
 - No authentication/authorization (add if needed)
 - Single worker by default (scale with `docker-compose up -d --scale worker=3`)
-- CPU-only processing (GPU support can be added)
 
 ## Support
 
 Refer to:
 - `README.md` - Main documentation
 - `QUICKSTART.md` - Quick start guide
-- `speaker-diarization-system-design-v2.md` - Full design document
-
