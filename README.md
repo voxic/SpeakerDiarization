@@ -87,7 +87,6 @@ If UFW is enabled, allow necessary ports:
 ```bash
 sudo ufw allow 3001/tcp  # Next.js web UI
 sudo ufw allow 27017/tcp # MongoDB (if accessing externally)
-sudo ufw allow 8081/tcp  # Mongo Express (if accessing externally)
 ```
 
 ### 7. Install Git (if not already installed)
@@ -127,7 +126,7 @@ sudo apt install -y git
 
 4. **Access the application:**
    - Web UI: http://localhost:3001
-   - MongoDB: mongodb://localhost:27017
+   - MongoDB: use the host/port from your `MONGODB_URI`
 
 ## Project Structure
 
@@ -205,7 +204,7 @@ If `ELEVENLABS_LANGUAGE` is not set, ElevenLabs will auto-detect the language (d
 - Check logs: `docker-compose logs -f worker`
 - Verify ElevenLabs API key is set correctly in `.env`
 - Ensure sufficient disk space for audio files
-- Check MongoDB connection: `docker-compose exec mongo mongosh speaker_db`
+- Verify MongoDB connection using your configured `MONGODB_URI`
 - Verify internet connectivity (required for ElevenLabs API calls)
 - Check ElevenLabs API quota/limits if processing fails
 
