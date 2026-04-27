@@ -2,7 +2,9 @@
 FROM python:3.11-slim
 
 # Install system dependencies for audio processing
+# Keep ffmpeg for broad codec/container support (especially m4a/aac via librosa/audioread fallback)
 RUN apt-get update && apt-get install -y \
+    ffmpeg \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
